@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Plus,
   Minus,
@@ -12,47 +12,16 @@ import {
 import Navbar from "./Navbar";
 import Sidebar from "./Sidebar";
 
-const Inventory = () => {
+const API_URL = "http://localhost:5000";
+
+function Inventory() {
   // =========================
-  // DUMMY INVENTORY DATA
+  // INVENTORY DATA
   // =========================
-  const [inventory, setInventory] = useState([
-    {
-      id: 1,
-      clothName: "Cotton Shirt",
-      quantity: 25,
-      buyingPrice: 350,
-      sellingPrice: 650,
-    },
-    {
-      id: 2,
-      clothName: "Linen Shirt",
-      quantity: 18,
-      buyingPrice: 500,
-      sellingPrice: 900,
-    },
-    {
-      id: 3,
-      clothName: "Denim Jeans",
-      quantity: 12,
-      buyingPrice: 800,
-      sellingPrice: 1400,
-    },
-    {
-      id: 4,
-      clothName: "Cotton Pant",
-      quantity: 20,
-      buyingPrice: 450,
-      sellingPrice: 850,
-    },
-    {
-      id: 5,
-      clothName: "Silk Kurta",
-      quantity: 8,
-      buyingPrice: 900,
-      sellingPrice: 1600,
-    },
-  ]);
+  const [inventory, setInventory] = useState([]);
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   // =========================
   // FORM
@@ -79,83 +48,127 @@ const Inventory = () => {
   const [quantityChange, setQuantityChange] = useState(1);
 
   // =========================
+  // GET ALL INVENTORY
+  // =========================
+  useEffect(function () {
+    getInventory();
+  }, []);
+
+  async function getInventory() {
+    try {
+      setLoading(true);
+      setError("");
+
+      const response = await fetch(`${API_URL}/api/inventory/getInventory`);
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch inventory");
+      }
+
+      const data = await response.json();
+
+      // If controller returns array directly
+      const inventoryData = Array.isArray(data)
+        ? data
+        : data.inventory || data.data || [];
+
+      setInventory(inventoryData);
+    } catch (error) {
+      console.error("Get inventory error:", error);
+      setError("Unable to load inventory");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // =========================
   // OPEN ADD MODAL
   // =========================
-  const openAddModal = () => {
+  function openAddModal() {
     setForm(emptyForm);
     setSelectedItem(null);
     setModalType("add");
-  };
+  }
 
   // =========================
   // OPEN EDIT MODAL
   // =========================
-  const openEditModal = (item) => {
+  function openEditModal(item) {
     setSelectedItem(item);
 
     setForm({
-      clothName: item.clothName,
-      quantity: item.quantity,
-      buyingPrice: item.buyingPrice,
-      sellingPrice: item.sellingPrice,
+      clothName: item.cloth_name || item.clothName || "",
+      quantity: Number(item.quantity) || 0,
+      buyingPrice: item.buying_price || item.buyingPrice || "",
+      sellingPrice: item.selling_price || item.sellingPrice || "",
     });
 
     setQuantityAction("add");
     setQuantityChange(1);
 
     setModalType("edit");
-  };
+  }
 
   // =========================
   // CLOSE MODAL
   // =========================
-  const closeModal = () => {
+  function closeModal() {
     setModalType(null);
     setSelectedItem(null);
     setForm(emptyForm);
     setQuantityAction("add");
     setQuantityChange(1);
-  };
+  }
 
   // =========================
   // INPUT CHANGE
   // =========================
-  const handleChange = (e) => {
+  function handleChange(e) {
     const { name, value } = e.target;
 
-    setForm((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
+    setForm(function (prev) {
+      return {
+        ...prev,
+        [name]: value,
+      };
+    });
+  }
 
   // =========================
   // ADD MODAL QUANTITY
   // =========================
-  const increaseAddQuantity = () => {
-    setForm((prev) => ({
-      ...prev,
-      quantity: Number(prev.quantity || 0) + 1,
-    }));
-  };
+  function increaseAddQuantity() {
+    setForm(function (prev) {
+      return {
+        ...prev,
+        quantity: Number(prev.quantity || 0) + 1,
+      };
+    });
+  }
 
-  const decreaseAddQuantity = () => {
-    setForm((prev) => ({
-      ...prev,
-      quantity: Math.max(1, Number(prev.quantity || 1) - 1),
-    }));
-  };
+  function decreaseAddQuantity() {
+    setForm(function (prev) {
+      return {
+        ...prev,
+        quantity: Math.max(1, Number(prev.quantity || 1) - 1),
+      };
+    });
+  }
 
   // =========================
   // EDIT QUANTITY
   // =========================
-  const increaseChangeQuantity = () => {
-    setQuantityChange((prev) => Number(prev) + 1);
-  };
+  function increaseChangeQuantity() {
+    setQuantityChange(function (prev) {
+      return Number(prev) + 1;
+    });
+  }
 
-  const decreaseChangeQuantity = () => {
-    setQuantityChange((prev) => Math.max(1, Number(prev) - 1));
-  };
+  function decreaseChangeQuantity() {
+    setQuantityChange(function (prev) {
+      return Math.max(1, Number(prev) - 1);
+    });
+  }
 
   // =========================
   // CURRENT / NEW QUANTITY
@@ -170,89 +183,128 @@ const Inventory = () => {
       : Math.max(0, currentQuantity - changeAmount);
 
   // =========================
+  // CREATE INVENTORY
+  // =========================
+  async function createInventory() {
+    try {
+      const response = await fetch(`${API_URL}/api/inventory/createInventory`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          cloth_name: form.clothName.trim(),
+          quantity: Number(form.quantity),
+          buying_price: Number(form.buyingPrice),
+          selling_price: Number(form.sellingPrice),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to create inventory");
+      }
+
+      await response.json();
+
+      await getInventory();
+
+      closeModal();
+    } catch (error) {
+      console.error("Create inventory error:", error);
+      setError("Unable to create inventory");
+    }
+  }
+
+  // =========================
+  // UPDATE INVENTORY
+  // =========================
+  async function updateInventory() {
+    try {
+      const id = selectedItem.id;
+
+      const response = await fetch(`${API_URL}/api/inventory/updateInventory/${id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          cloth_name: form.clothName.trim(),
+          quantity: newQuantity,
+          buying_price: Number(form.buyingPrice),
+          selling_price: Number(form.sellingPrice),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update inventory");
+      }
+
+      await response.json();
+
+      await getInventory();
+
+      closeModal();
+    } catch (error) {
+      console.error("Update inventory error:", error);
+      setError("Unable to update inventory");
+    }
+  }
+
+  // =========================
   // SUBMIT
   // =========================
-  const handleSubmit = (e) => {
+  async function handleSubmit(e) {
     e.preventDefault();
 
     if (!form.clothName.trim()) {
       return;
     }
 
-    // =========================
-    // ADD NEW INVENTORY
-    // =========================
     if (modalType === "add") {
-      const newItem = {
-        id: Date.now(),
-        clothName: form.clothName.trim(),
-        quantity: Number(form.quantity),
-        buyingPrice: Number(form.buyingPrice),
-        sellingPrice: Number(form.sellingPrice),
-      };
-
-      setInventory((prev) => [...prev, newItem]);
+      await createInventory();
     }
 
-    // =========================
-    // EDIT INVENTORY
-    // =========================
     if (modalType === "edit") {
-      setInventory((prev) =>
-        prev.map((item) => {
-          if (item.id !== selectedItem.id) {
-            return item;
-          }
-
-          return {
-            ...item,
-            clothName: form.clothName.trim(),
-            quantity: newQuantity,
-            buyingPrice: Number(form.buyingPrice),
-            sellingPrice: Number(form.sellingPrice),
-          };
-        }),
-      );
+      await updateInventory();
     }
-
-    closeModal();
-  };
+  }
 
   // =========================
   // LOGOUT
   // =========================
-  const handleLogout = () => {
+  function handleLogout() {
     localStorage.removeItem("token");
     window.location.href = "/login";
-  };
+  }
 
   // =========================
   // TOTALS
   // =========================
-  const totalQuantity = inventory.reduce(
-    (total, item) => total + Number(item.quantity),
-    0,
-  );
+  const totalQuantity = inventory.reduce(function (total, item) {
+    return total + Number(item.quantity || 0);
+  }, 0);
 
-  const stockValue = inventory.reduce(
-    (total, item) => total + Number(item.quantity) * Number(item.buyingPrice),
-    0,
-  );
+  const stockValue = inventory.reduce(function (total, item) {
+    return (
+      total +
+      Number(item.quantity || 0) *
+        Number(item.buying_price || item.buyingPrice || 0)
+    );
+  }, 0);
 
+  // =========================
+  // RENDER
+  // =========================
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#f8f9fb]">
-      {/* ================= SIDEBAR ================= */}
       <Sidebar />
 
-      {/* ================= MAIN ================= */}
       <div className="ml-0 min-h-screen lg:ml-64">
-        {/* ================= NAVBAR ================= */}
         <Navbar onLogout={handleLogout} />
 
-        {/* ================= CONTENT ================= */}
         <main className="pt-20">
           <div className="space-y-6 p-4 sm:p-6 lg:space-y-7 lg:p-8">
-            {/* ================= PAGE HEADER ================= */}
+            {/* PAGE HEADER */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h1 className="text-2xl font-semibold tracking-tight text-[#172033] sm:text-3xl">
@@ -274,7 +326,14 @@ const Inventory = () => {
               </button>
             </div>
 
-            {/* ================= SUMMARY CARDS ================= */}
+            {/* ERROR */}
+            {error && (
+              <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
+                {error}
+              </div>
+            )}
+
+            {/* SUMMARY CARDS */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {/* Total Items */}
               <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
@@ -346,9 +405,8 @@ const Inventory = () => {
               </div>
             </div>
 
-            {/* ================= INVENTORY TABLE ================= */}
+            {/* INVENTORY TABLE */}
             <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-              {/* Table Header */}
               <div className="border-b border-gray-100 px-4 py-5 sm:px-6">
                 <div className="flex items-center gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#f1e6c9] text-[#8f681d]">
@@ -365,114 +423,141 @@ const Inventory = () => {
                 </div>
               </div>
 
-              {/* Responsive Table */}
               <div className="w-full overflow-x-auto">
-                <table className="w-full min-w-[720px]">
-                  <thead>
-                    <tr className="border-b border-gray-100 bg-gray-50/70">
-                      <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-400 sm:px-6">
-                        #
-                      </th>
+                {loading ? (
+                  <div className="flex items-center justify-center py-12 text-sm text-gray-400">
+                    Loading inventory...
+                  </div>
+                ) : inventory.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12">
+                    <Package size={40} className="text-gray-300" />
 
-                      <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-400 sm:px-6">
-                        Cloth Name
-                      </th>
+                    <p className="mt-3 text-sm text-gray-500">
+                      No inventory found
+                    </p>
 
-                      <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-400 sm:px-6">
-                        Quantity
-                      </th>
+                    <button
+                      type="button"
+                      onClick={openAddModal}
+                      className="mt-4 rounded-lg bg-[#172033] px-4 py-2 text-xs font-medium text-white"
+                    >
+                      Add Inventory
+                    </button>
+                  </div>
+                ) : (
+                  <table className="w-full min-w-[720px]">
+                    <thead>
+                      <tr className="border-b border-gray-100 bg-gray-50/70">
+                        <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-400 sm:px-6">
+                          #
+                        </th>
 
-                      <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-400 sm:px-6">
-                        Buying Price
-                      </th>
+                        <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-400 sm:px-6">
+                          Cloth Name
+                        </th>
 
-                      <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-400 sm:px-6">
-                        Selling Price
-                      </th>
+                        <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-400 sm:px-6">
+                          Quantity
+                        </th>
 
-                      <th className="px-4 py-4 text-right text-xs font-semibold uppercase tracking-wider text-gray-400 sm:px-6">
-                        Action
-                      </th>
-                    </tr>
-                  </thead>
+                        <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-400 sm:px-6">
+                          Buying Price
+                        </th>
 
-                  <tbody className="divide-y divide-gray-100">
-                    {inventory.map((item, index) => (
-                      <tr
-                        key={item.id}
-                        className="transition hover:bg-gray-50/70"
-                      >
-                        {/* Number */}
-                        <td className="px-4 py-4 text-sm text-gray-400 sm:px-6">
-                          {String(index + 1).padStart(2, "0")}
-                        </td>
+                        <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-400 sm:px-6">
+                          Selling Price
+                        </th>
 
-                        {/* Cloth Name */}
-                        <td className="px-4 py-4 sm:px-6">
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f1e6c9] text-[#8f681d]">
-                              <Package size={17} />
-                            </div>
-
-                            <div>
-                              <p className="whitespace-nowrap text-sm font-medium text-[#172033]">
-                                {item.clothName}
-                              </p>
-
-                              <p className="text-xs text-gray-400">
-                                Cloth item
-                              </p>
-                            </div>
-                          </div>
-                        </td>
-
-                        {/* Quantity */}
-                        <td className="px-4 py-4 sm:px-6">
-                          <span
-                            className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${
-                              item.quantity === 0
-                                ? "bg-red-50 text-red-600"
-                                : item.quantity <= 5
-                                  ? "bg-amber-50 text-amber-600"
-                                  : "bg-green-50 text-green-600"
-                            }`}
-                          >
-                            {item.quantity} pcs
-                          </span>
-                        </td>
-
-                        {/* Buying Price */}
-                        <td className="px-4 py-4 sm:px-6">
-                          <p className="whitespace-nowrap text-sm text-gray-600">
-                            ₹{Number(item.buyingPrice).toLocaleString("en-IN")}
-                          </p>
-                        </td>
-
-                        {/* Selling Price */}
-                        <td className="px-4 py-4 sm:px-6">
-                          <p className="whitespace-nowrap text-sm font-medium text-[#172033]">
-                            ₹{Number(item.sellingPrice).toLocaleString("en-IN")}
-                          </p>
-                        </td>
-
-                        {/* Edit */}
-                        <td className="px-4 py-4 text-right sm:px-6">
-                          <button
-                            type="button"
-                            onClick={() => openEditModal(item)}
-                            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 transition hover:border-[#d9a441] hover:bg-[#fffaf0] hover:text-[#8f681d]"
-                          >
-                            <Edit3 size={15} />
-                            Edit
-                          </button>
-                        </td>
+                        <th className="px-4 py-4 text-right text-xs font-semibold uppercase tracking-wider text-gray-400 sm:px-6">
+                          Action
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+
+                    <tbody className="divide-y divide-gray-100">
+                      {inventory.map(function (item, index) {
+                        const clothName =
+                          item.cloth_name || item.clothName || "";
+
+                        const buyingPrice =
+                          item.buying_price || item.buyingPrice || 0;
+
+                        const sellingPrice =
+                          item.selling_price || item.sellingPrice || 0;
+
+                        return (
+                          <tr
+                            key={item.id}
+                            className="transition hover:bg-gray-50/70"
+                          >
+                            <td className="px-4 py-4 text-sm text-gray-400 sm:px-6">
+                              {String(index + 1).padStart(2, "0")}
+                            </td>
+
+                            <td className="px-4 py-4 sm:px-6">
+                              <div className="flex items-center gap-3">
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f1e6c9] text-[#8f681d]">
+                                  <Package size={17} />
+                                </div>
+
+                                <div>
+                                  <p className="whitespace-nowrap text-sm font-medium text-[#172033]">
+                                    {clothName}
+                                  </p>
+
+                                  <p className="text-xs text-gray-400">
+                                    Cloth item
+                                  </p>
+                                </div>
+                              </div>
+                            </td>
+
+                            <td className="px-4 py-4 sm:px-6">
+                              <span
+                                className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${
+                                  Number(item.quantity) === 0
+                                    ? "bg-red-50 text-red-600"
+                                    : Number(item.quantity) <= 5
+                                      ? "bg-amber-50 text-amber-600"
+                                      : "bg-green-50 text-green-600"
+                                }`}
+                              >
+                                {item.quantity} pcs
+                              </span>
+                            </td>
+
+                            <td className="px-4 py-4 sm:px-6">
+                              <p className="whitespace-nowrap text-sm text-gray-600">
+                                ₹{Number(buyingPrice).toLocaleString("en-IN")}
+                              </p>
+                            </td>
+
+                            <td className="px-4 py-4 sm:px-6">
+                              <p className="whitespace-nowrap text-sm font-medium text-[#172033]">
+                                ₹{Number(sellingPrice).toLocaleString("en-IN")}
+                              </p>
+                            </td>
+
+                            <td className="px-4 py-4 text-right sm:px-6">
+                              <button
+                                type="button"
+                                onClick={function () {
+                                  openEditModal(item);
+                                }}
+                                className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 transition hover:border-[#d9a441] hover:bg-[#fffaf0] hover:text-[#8f681d]"
+                              >
+                                <Edit3 size={15} />
+                                Edit
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
               </div>
 
-              {/* Footer */}
               <div className="border-t border-gray-100 px-4 py-4 sm:px-6">
                 <p className="text-xs text-gray-400">
                   Showing {inventory.length} inventory items
@@ -483,14 +568,11 @@ const Inventory = () => {
         </main>
       </div>
 
-      {/* ================================================= */}
       {/* MODAL */}
-      {/* ================================================= */}
-
       {modalType && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
           <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white shadow-2xl">
-            {/* ================= MODAL HEADER ================= */}
+            {/* MODAL HEADER */}
             <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4 sm:px-6">
               <div>
                 <h2 className="text-lg font-semibold text-[#172033]">
@@ -513,10 +595,10 @@ const Inventory = () => {
               </button>
             </div>
 
-            {/* ================= FORM ================= */}
+            {/* FORM */}
             <form onSubmit={handleSubmit}>
               <div className="space-y-5 p-5 sm:p-6">
-                {/* Cloth Name */}
+                {/* CLOTH NAME */}
                 <div>
                   <label className="mb-2 block text-sm font-medium text-gray-700">
                     Cloth Name
@@ -533,10 +615,7 @@ const Inventory = () => {
                   />
                 </div>
 
-                {/* ================================================= */}
-                {/* ADD MODAL QUANTITY */}
-                {/* ================================================= */}
-
+                {/* ADD QUANTITY */}
                 {modalType === "add" && (
                   <div>
                     <label className="mb-2 block text-sm font-medium text-gray-700">
@@ -574,17 +653,13 @@ const Inventory = () => {
                   </div>
                 )}
 
-                {/* ================================================= */}
-                {/* EDIT MODAL QUANTITY */}
-                {/* ================================================= */}
-
+                {/* EDIT QUANTITY */}
                 {modalType === "edit" && (
                   <div>
                     <label className="mb-2 block text-sm font-medium text-gray-700">
                       Stock Adjustment
                     </label>
 
-                    {/* Current Stock */}
                     <div className="mb-4 flex items-center justify-between rounded-xl bg-gray-50 px-4 py-3">
                       <span className="text-sm text-gray-500">
                         Current Quantity
@@ -595,12 +670,11 @@ const Inventory = () => {
                       </span>
                     </div>
 
-                    {/* ADD / REMOVE */}
                     <div className="grid grid-cols-2 gap-3">
                       {/* ADD */}
                       <button
                         type="button"
-                        onClick={() => {
+                        onClick={function () {
                           setQuantityAction("add");
                           setQuantityChange(1);
                         }}
@@ -617,7 +691,7 @@ const Inventory = () => {
                       {/* REMOVE */}
                       <button
                         type="button"
-                        onClick={() => {
+                        onClick={function () {
                           setQuantityAction("remove");
                           setQuantityChange(1);
                         }}
@@ -632,7 +706,7 @@ const Inventory = () => {
                       </button>
                     </div>
 
-                    {/* Quantity Change */}
+                    {/* QUANTITY CHANGE */}
                     <div className="mt-4">
                       <label className="mb-2 block text-xs font-medium text-gray-500">
                         Quantity to{" "}
@@ -700,12 +774,9 @@ const Inventory = () => {
                   </div>
                 )}
 
-                {/* ================================================= */}
                 {/* PRICE FIELDS */}
-                {/* ================================================= */}
-
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  {/* Buying Price */}
+                  {/* BUYING PRICE */}
                   <div>
                     <label className="mb-2 block text-sm font-medium text-gray-700">
                       Buying Price
@@ -729,7 +800,7 @@ const Inventory = () => {
                     </div>
                   </div>
 
-                  {/* Selling Price */}
+                  {/* SELLING PRICE */}
                   <div>
                     <label className="mb-2 block text-sm font-medium text-gray-700">
                       Selling Price
@@ -755,7 +826,7 @@ const Inventory = () => {
                 </div>
               </div>
 
-              {/* ================= MODAL FOOTER ================= */}
+              {/* MODAL FOOTER */}
               <div className="flex flex-col-reverse gap-3 border-t border-gray-100 px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
                 <button
                   type="button"
@@ -778,6 +849,6 @@ const Inventory = () => {
       )}
     </div>
   );
-};
+}
 
 export default Inventory;
