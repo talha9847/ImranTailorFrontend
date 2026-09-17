@@ -7,6 +7,7 @@ import {
   X,
   ShoppingBag,
   IndianRupee,
+  Loader2,
 } from "lucide-react";
 
 import Navbar from "./Navbar";
