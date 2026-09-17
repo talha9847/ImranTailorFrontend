@@ -19,7 +19,11 @@ function Inventory() {
   // =========================
   // INVENTORY DATA
   // =========================
+
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   const [inventory, setInventory] = useState([]);
+  const [submitting, setSubmitting] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -186,6 +190,7 @@ function Inventory() {
   // =========================
   async function createInventory() {
     try {
+      setSubmitting(true);
       setError("");
 
       const response = await axios.post("/api/inventory/createInventory", {
@@ -206,6 +211,8 @@ function Inventory() {
       );
 
       setError(error.response?.data?.message || "Unable to create inventory");
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -214,6 +221,7 @@ function Inventory() {
   // =========================
   async function updateInventory() {
     try {
+      setSubmitting(true);
       setError("");
 
       const id = selectedItem.id;
@@ -236,6 +244,8 @@ function Inventory() {
       );
 
       setError(error.response?.data?.message || "Unable to update inventory");
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -244,6 +254,8 @@ function Inventory() {
   // =========================
   async function handleSubmit(e) {
     e.preventDefault();
+
+    if (submitting) return;
 
     if (!form.clothName.trim()) {
       return;
@@ -286,11 +298,13 @@ function Inventory() {
   // =========================
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#f8f9fb]">
-      <Sidebar />
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <div className="ml-0 min-h-screen lg:ml-64">
-        <Navbar onLogout={handleLogout} />
-
+        <Navbar
+          onMenuClick={() => setSidebarOpen(true)}
+          onLogout={handleLogout}
+        />
         <main className="pt-20">
           <div className="space-y-6 p-4 sm:p-6 lg:space-y-7 lg:p-8">
             {/* PAGE HEADER */}
@@ -414,8 +428,15 @@ function Inventory() {
 
               <div className="w-full overflow-x-auto">
                 {loading ? (
-                  <div className="flex items-center justify-center py-12 text-sm text-gray-400">
-                    Loading inventory...
+                  <div className="flex flex-col items-center justify-center py-16">
+                    <Loader2
+                      size={28}
+                      className="animate-spin text-[#d9a441]"
+                    />
+
+                    <p className="mt-3 text-sm text-gray-400">
+                      Loading inventory...
+                    </p>
                   </div>
                 ) : inventory.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12">
@@ -578,9 +599,10 @@ function Inventory() {
               <button
                 type="button"
                 onClick={closeModal}
-                className="rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
+                disabled={submitting}
+                className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm font-medium text-gray-600 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
               >
-                <X size={20} />
+                Cancel
               </button>
             </div>
 
@@ -824,12 +846,21 @@ function Inventory() {
                 >
                   Cancel
                 </button>
-
                 <button
                   type="submit"
-                  className="w-full rounded-xl bg-[#172033] px-5 py-3 text-sm font-medium text-white transition hover:bg-[#222d43] sm:w-auto"
+                  disabled={submitting}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#172033] px-5 py-3 text-sm font-medium text-white transition hover:bg-[#222d43] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                 >
-                  {modalType === "add" ? "Add Inventory" : "Save Changes"}
+                  {submitting ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      {modalType === "add" ? "Adding..." : "Saving..."}
+                    </>
+                  ) : (
+                    <>
+                      {modalType === "add" ? "Add Inventory" : "Save Changes"}
+                    </>
+                  )}
                 </button>
               </div>
             </form>
