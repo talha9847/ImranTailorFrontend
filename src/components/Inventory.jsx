@@ -11,6 +11,7 @@ import {
 
 import Navbar from "./Navbar";
 import Sidebar from "./Sidebar";
+import axios from "axios";
 
 const API_URL = "http://localhost:5000";
 
@@ -53,29 +54,27 @@ function Inventory() {
   useEffect(function () {
     getInventory();
   }, []);
-
   async function getInventory() {
     try {
       setLoading(true);
       setError("");
 
-      const response = await fetch(`${API_URL}/api/inventory/getInventory`);
+      const response = await axios.get("/api/inventory/getInventory");
 
-      if (!response.ok) {
-        throw new Error("Failed to fetch inventory");
-      }
+      const data = response.data;
 
-      const data = await response.json();
-
-      // If controller returns array directly
       const inventoryData = Array.isArray(data)
         ? data
         : data.inventory || data.data || [];
 
       setInventory(inventoryData);
     } catch (error) {
-      console.error("Get inventory error:", error);
-      setError("Unable to load inventory");
+      console.error(
+        "Get inventory error:",
+        error.response?.data || error.message,
+      );
+
+      setError(error.response?.data?.message || "Unable to load inventory");
     } finally {
       setLoading(false);
     }
@@ -187,31 +186,26 @@ function Inventory() {
   // =========================
   async function createInventory() {
     try {
-      const response = await fetch(`${API_URL}/api/inventory/createInventory`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          cloth_name: form.clothName.trim(),
-          quantity: Number(form.quantity),
-          buying_price: Number(form.buyingPrice),
-          selling_price: Number(form.sellingPrice),
-        }),
+      setError("");
+
+      const response = await axios.post("/api/inventory/createInventory", {
+        cloth_name: form.clothName.trim(),
+        quantity: Number(form.quantity),
+        buying_price: Number(form.buyingPrice),
+        selling_price: Number(form.sellingPrice),
       });
 
-      if (!response.ok) {
-        throw new Error("Failed to create inventory");
-      }
-
-      await response.json();
+      console.log("Inventory created:", response.data);
 
       await getInventory();
-
       closeModal();
     } catch (error) {
-      console.error("Create inventory error:", error);
-      setError("Unable to create inventory");
+      console.error(
+        "Create inventory error:",
+        error.response?.data || error.message,
+      );
+
+      setError(error.response?.data?.message || "Unable to create inventory");
     }
   }
 
@@ -220,33 +214,28 @@ function Inventory() {
   // =========================
   async function updateInventory() {
     try {
+      setError("");
+
       const id = selectedItem.id;
 
-      const response = await fetch(`${API_URL}/api/inventory/updateInventory/${id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          cloth_name: form.clothName.trim(),
-          quantity: newQuantity,
-          buying_price: Number(form.buyingPrice),
-          selling_price: Number(form.sellingPrice),
-        }),
+      const response = await axios.put(`/api/inventory/updateInventory/${id}`, {
+        cloth_name: form.clothName.trim(),
+        quantity: newQuantity,
+        buying_price: Number(form.buyingPrice),
+        selling_price: Number(form.sellingPrice),
       });
 
-      if (!response.ok) {
-        throw new Error("Failed to update inventory");
-      }
-
-      await response.json();
+      console.log("Inventory updated:", response.data);
 
       await getInventory();
-
       closeModal();
     } catch (error) {
-      console.error("Update inventory error:", error);
-      setError("Unable to update inventory");
+      console.error(
+        "Update inventory error:",
+        error.response?.data || error.message,
+      );
+
+      setError(error.response?.data?.message || "Unable to update inventory");
     }
   }
 
