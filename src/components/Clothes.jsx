@@ -27,8 +27,27 @@ const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 const emptyForm = {
   customer_name: "",
   contact: "",
-  cloth_photo: null,
+
+  cloth_count: 1,
+
+  // New File objects.
+  // Index 0 = cloth 1
+  // Index 1 = cloth 2
+  // etc.
+  cloth_photos: [],
+
+  // Existing DB/Drive photos.
+  // Each item:
+  // {
+  //   id,
+  //   cloth_number,
+  //   cloth_photo
+  // }
+  existing_cloth_photos: [],
+
   note_photo: null,
+  existing_note_photo: null,
+
   remainder_date: "",
   delivery_date: "",
   status: "pending",
@@ -39,6 +58,7 @@ const Clothes = () => {
 
   const [clothes, setClothes] = useState([]);
   const [loading, setLoading] = useState(true);
+
   const [operationLoading, setOperationLoading] = useState(false);
   const [statusLoadingId, setStatusLoadingId] = useState(null);
 
@@ -52,12 +72,19 @@ const Clothes = () => {
   const [editMode, setEditMode] = useState(false);
   const [editingId, setEditingId] = useState(null);
 
-  const [removeCloth, setRemoveCloth] = useState(false);
   const [removeNote, setRemoveNote] = useState(false);
 
   const [form, setForm] = useState(emptyForm);
 
-  const [clothPreview, setClothPreview] = useState("");
+  /*
+   * Each index represents one cloth.
+   *
+   * Example:
+   * clothPreviews[0] -> cloth 1 preview
+   * clothPreviews[1] -> cloth 2 preview
+   */
+  const [clothPreviews, setClothPreviews] = useState([]);
+
   const [notePreview, setNotePreview] = useState("");
 
   useEffect(() => {
@@ -80,57 +107,27 @@ const Clothes = () => {
 
     const stringValue = String(value);
 
-    /*
-     * If backend sends:
-     * 2026-09-17
-     *
-     * Keep it exactly as-is.
-     * Do NOT pass it through new Date()
-     * because timezone conversion can change the day.
-     */
     if (/^\d{4}-\d{2}-\d{2}$/.test(stringValue)) {
       return stringValue;
     }
 
-    /*
-     * For ISO timestamps such as:
-     * 2026-09-17T18:30:00.000Z
-     *
-     * Extract the calendar date from the value.
-     */
     const match = stringValue.match(/^(\d{4}-\d{2}-\d{2})/);
 
-    if (match) {
-      return match[1];
-    }
-
-    return "";
+    return match ? match[1] : "";
   }
 
   function formatDate(value) {
     const dateValue = normalizeDateValue(value);
 
-    if (!dateValue) {
-      return "-";
-    }
+    if (!dateValue) return "-";
 
     const [year, month, day] = dateValue.split("-").map(Number);
 
-    if (!year || !month || !day) {
-      return "-";
-    }
+    if (!year || !month || !day) return "-";
 
-    /*
-     * Use local Date with explicit values instead of:
-     * new Date("2026-09-17")
-     *
-     * This prevents UTC timezone shifting.
-     */
     const date = new Date(year, month - 1, day);
 
-    if (Number.isNaN(date.getTime())) {
-      return "-";
-    }
+    if (Number.isNaN(date.getTime())) return "-";
 
     return date.toLocaleDateString("en-IN", {
       day: "2-digit",
@@ -187,8 +184,47 @@ const Clothes = () => {
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
+  /*
+   * ------------------------------------------------------------
+   * Normalize API order
+   * ------------------------------------------------------------
+   *
+   * Expected API:
+   *
+   * {
+   *   id: 1,
+   *   customer: {
+   *     customer_name: "...",
+   *     contact: "..."
+   *   },
+   *   clothes: [
+   *     {
+   *       id: 10,
+   *       order_id: 1,
+   *       cloth_number: 1,
+   *       cloth_photo: {
+   *         id: "...",
+   *         thumbnail: "...",
+   *         url: "..."
+   *       }
+   *     }
+   *   ],
+   *   note_photo: {
+   *     id: "...",
+   *     thumbnail: "...",
+   *     url: "..."
+   *   }
+   * }
+   */
+
   function normalizeItem(item) {
     const customer = item.customer || {};
+
+    const orderClothes = Array.isArray(item.clothes)
+      ? [...item.clothes].sort(
+          (a, b) => Number(a.cloth_number || 0) - Number(b.cloth_number || 0),
+        )
+      : [];
 
     return {
       id: item.id,
@@ -198,7 +234,9 @@ const Clothes = () => {
 
       contact: item.contact || customer.contact || "",
 
-      clothPhoto: item.clothPhoto || item.cloth_photo || null,
+      clothes: orderClothes,
+
+      clothCount: orderClothes.length,
 
       notePhoto: item.notePhoto || item.note_photo || null,
 
@@ -244,7 +282,7 @@ const Clothes = () => {
 
   /*
    * ------------------------------------------------------------
-   * API
+   * GET
    * ------------------------------------------------------------
    */
 
@@ -289,16 +327,34 @@ const Clothes = () => {
    * ------------------------------------------------------------
    */
 
+  function revokeBlobUrls() {
+    clothPreviews.forEach((preview) => {
+      if (preview && preview.startsWith("blob:")) {
+        URL.revokeObjectURL(preview);
+      }
+    });
+
+    if (notePreview && notePreview.startsWith("blob:")) {
+      URL.revokeObjectURL(notePreview);
+    }
+  }
+
   function resetModalState() {
+    revokeBlobUrls();
+
     setEditMode(false);
     setEditingId(null);
 
-    setForm(emptyForm);
+    setForm({
+      ...emptyForm,
+      cloth_count: 1,
+      cloth_photos: [],
+      existing_cloth_photos: [],
+    });
 
-    setClothPreview("");
+    setClothPreviews([]);
     setNotePreview("");
 
-    setRemoveCloth(false);
     setRemoveNote(false);
 
     setUploadProgress(0);
@@ -308,21 +364,55 @@ const Clothes = () => {
     resetModalState();
 
     setError("");
+
     setModalOpen(true);
   }
 
   function openEditModal(item) {
-    setEditMode(true);
-    setEditingId(item.id);
+    const orderClothes = Array.isArray(item.clothes)
+      ? [...item.clothes].sort(
+          (a, b) => Number(a.cloth_number || 0) - Number(b.cloth_number || 0),
+        )
+      : [];
 
-    setError("");
+    const clothCount = Math.max(1, orderClothes.length);
 
+    /*
+     * Put existing photos at their cloth_number index.
+     *
+     * Example:
+     *
+     * cloth 1 -> index 0
+     * cloth 2 -> index 1
+     * cloth 3 -> index 2
+     */
+    const existingPhotos = Array.from({ length: clothCount }, () => null);
+
+    orderClothes.forEach((cloth) => {
+      const number = Number(cloth.cloth_number);
+
+      if (number >= 1) {
+        existingPhotos[number - 1] = cloth;
+      }
+    });
+
+    /*
+     * We use an empty preview for existing photos here.
+     *
+     * The modal checks existing_cloth_photos separately.
+     */
     setForm({
       customer_name: item.customerName || "",
       contact: item.contact || "",
 
-      cloth_photo: null,
+      cloth_count: clothCount,
+
+      cloth_photos: Array.from({ length: clothCount }, () => null),
+
+      existing_cloth_photos: existingPhotos,
+
       note_photo: null,
+      existing_note_photo: item.notePhoto || null,
 
       remainder_date: normalizeDateValue(item.remainderDate),
 
@@ -331,12 +421,15 @@ const Clothes = () => {
       status: item.status || "pending",
     });
 
-    setClothPreview(item.clothPhoto?.thumbnail || "");
+    setClothPreviews(Array.from({ length: clothCount }, () => ""));
 
     setNotePreview(item.notePhoto?.thumbnail || "");
 
-    setRemoveCloth(false);
+    setEditMode(true);
+    setEditingId(item.id);
+
     setRemoveNote(false);
+    setError("");
 
     setModalOpen(true);
   }
@@ -347,7 +440,9 @@ const Clothes = () => {
     }
 
     setModalOpen(false);
+
     resetModalState();
+
     setError("");
   }
 
@@ -364,6 +459,56 @@ const Clothes = () => {
       ...previous,
       [name]: value,
     }));
+  }
+
+  function handleClothCountChange(event) {
+    const rawValue = event.target.value;
+
+    /*
+     * Allow user to temporarily clear the input.
+     */
+    if (rawValue === "") {
+      setForm((previous) => ({
+        ...previous,
+        cloth_count: "",
+      }));
+
+      return;
+    }
+
+    const count = Math.max(1, Math.min(50, Number(rawValue) || 1));
+
+    setForm((previous) => {
+      const oldPhotos = previous.cloth_photos || [];
+
+      const oldExisting = previous.existing_cloth_photos || [];
+
+      return {
+        ...previous,
+
+        cloth_count: count,
+
+        /*
+         * Preserve already selected NEW files.
+         */
+        cloth_photos: Array.from(
+          { length: count },
+          (_, index) => oldPhotos[index] || null,
+        ),
+
+        /*
+         * Preserve existing Drive photos.
+         */
+        existing_cloth_photos: Array.from(
+          { length: count },
+          (_, index) => oldExisting[index] || null,
+        ),
+      };
+    });
+
+    setClothPreviews((previous) =>
+      Array.from({ length: count }, (_, index) => previous[index] || ""),
+    );
   }
 
   function validateImage(file, label) {
@@ -386,12 +531,20 @@ const Clothes = () => {
     return true;
   }
 
-  function handleClothPhoto(event) {
+  /*
+   * ------------------------------------------------------------
+   * Cloth photo selection
+   * ------------------------------------------------------------
+   */
+
+  function handleClothPhoto(event, index) {
     const file = event.target.files?.[0];
 
-    if (!file) return;
+    if (!file) {
+      return;
+    }
 
-    if (!validateImage(file, "cloth")) {
+    if (!validateImage(file, `cloth ${index + 1}`)) {
       event.target.value = "";
       return;
     }
@@ -399,32 +552,93 @@ const Clothes = () => {
     setError("");
 
     /*
-     * Revoke previous blob URL if one exists.
+     * Revoke previous blob URL.
      */
-    if (clothPreview && clothPreview.startsWith("blob:")) {
-      URL.revokeObjectURL(clothPreview);
-    }
+    setClothPreviews((previous) => {
+      const updated = [...previous];
 
-    const preview = URL.createObjectURL(file);
+      if (updated[index] && updated[index].startsWith("blob:")) {
+        URL.revokeObjectURL(updated[index]);
+      }
 
-    setForm((previous) => ({
-      ...previous,
-      cloth_photo: file,
-    }));
+      updated[index] = URL.createObjectURL(file);
 
-    setClothPreview(preview);
+      return updated;
+    });
 
     /*
-     * New file means we don't need the backend
-     * remove flag anymore.
+     * Store new File.
+     *
+     * This is important:
+     *
+     * existing photo remains in
+     * existing_cloth_photos
+     *
+     * new file is stored in
+     * cloth_photos
+     *
+     * During update, only this File is uploaded.
      */
-    setRemoveCloth(false);
+    setForm((previous) => {
+      const photos = [...(previous.cloth_photos || [])];
+
+      photos[index] = file;
+
+      return {
+        ...previous,
+        cloth_photos: photos,
+      };
+    });
+
+    /*
+     * File has replaced existing photo,
+     * but we don't delete the DB row.
+     *
+     * Backend updates the same cloth_number.
+     */
   }
+
+  function removeSelectedCloth(index) {
+    if (operationLoading) {
+      return;
+    }
+
+    setClothPreviews((previous) => {
+      const updated = [...previous];
+
+      if (updated[index] && updated[index].startsWith("blob:")) {
+        URL.revokeObjectURL(updated[index]);
+      }
+
+      updated[index] = "";
+
+      return updated;
+    });
+
+    setForm((previous) => {
+      const photos = [...(previous.cloth_photos || [])];
+
+      photos[index] = null;
+
+      return {
+        ...previous,
+        cloth_photos: photos,
+      };
+    });
+  }
+
+  /*
+   * ------------------------------------------------------------
+   * Note photo
+   * ------------------------------------------------------------
+   */
 
   function handleNotePhoto(event) {
     const file = event.target.files?.[0];
 
-    if (!file) return;
+    if (!file) {
+      return;
+    }
 
     if (!validateImage(file, "note")) {
       event.target.value = "";
@@ -449,43 +663,37 @@ const Clothes = () => {
     setRemoveNote(false);
   }
 
-  function removeClothPhoto() {
-    if (operationLoading) return;
-
-    if (clothPreview && clothPreview.startsWith("blob:")) {
-      URL.revokeObjectURL(clothPreview);
-    }
-
-    setForm((previous) => ({
-      ...previous,
-      cloth_photo: null,
-    }));
-
-    setClothPreview("");
-
-    if (editMode) {
-      setRemoveCloth(true);
-    }
-  }
-
   function removeNotePhoto() {
-    if (operationLoading) return;
+    if (operationLoading) {
+      return;
+    }
 
     if (notePreview && notePreview.startsWith("blob:")) {
       URL.revokeObjectURL(notePreview);
     }
+
+    setNotePreview("");
 
     setForm((previous) => ({
       ...previous,
       note_photo: null,
     }));
 
-    setNotePreview("");
-
+    /*
+     * During edit this tells backend:
+     *
+     * removeNotePhoto=true
+     */
     if (editMode) {
       setRemoveNote(true);
     }
   }
+
+  /*
+   * ------------------------------------------------------------
+   * FormData
+   * ------------------------------------------------------------
+   */
 
   function createFormData() {
     const formData = new FormData();
@@ -494,23 +702,75 @@ const Clothes = () => {
 
     formData.append("contact", form.contact.trim());
 
-    /*
-     * Always send dates as YYYY-MM-DD.
-     */
+    formData.append("cloth_count", String(Number(form.cloth_count) || 1));
+
     formData.append("remainder_date", normalizeDateValue(form.remainder_date));
 
     formData.append("delivery_date", normalizeDateValue(form.delivery_date));
 
     formData.append("status", form.status);
 
-    formData.append("removeClothPhoto", String(removeCloth));
-
+    /*
+     * Note removal is only relevant to update,
+     * but sending it is harmless.
+     */
     formData.append("removeNotePhoto", String(removeNote));
 
-    if (form.cloth_photo instanceof File) {
-      formData.append("cloth_photo", form.cloth_photo);
+    /*
+     * ----------------------------------------------------------
+     * CREATE
+     * ----------------------------------------------------------
+     *
+     * For create we send:
+     *
+     * cloth_photos
+     * cloth_photos
+     * cloth_photos
+     *
+     * Multer .any() will return all of them.
+     *
+     * Backend should preserve req.files order.
+     */
+
+    if (!editMode) {
+      (form.cloth_photos || []).forEach((file) => {
+        if (file instanceof File) {
+          formData.append("cloth_photos", file);
+        }
+      });
     }
 
+    /*
+     * ----------------------------------------------------------
+     * UPDATE
+     * ----------------------------------------------------------
+     *
+     * For update we send ONLY changed files.
+     *
+     * Example:
+     *
+     * cloth 1 unchanged
+     * cloth 2 changed
+     * cloth 3 unchanged
+     *
+     * Request:
+     *
+     * cloth_photos[2] = new file
+     *
+     * This prevents unnecessary uploads.
+     */
+
+    if (editMode) {
+      (form.cloth_photos || []).forEach((file, index) => {
+        if (file instanceof File) {
+          formData.append(`cloth_photos[${index + 1}]`, file);
+        }
+      });
+    }
+
+    /*
+     * Note is independent from cloth photos.
+     */
     if (form.note_photo instanceof File) {
       formData.append("note_photo", form.note_photo);
     }
@@ -519,8 +779,29 @@ const Clothes = () => {
   }
 
   /*
+   * Debug helper.
+   */
+  function logFormData(formData) {
+    console.log("========== CLOTHES FORMDATA ==========");
+
+    for (const [key, value] of formData.entries()) {
+      if (value instanceof File) {
+        console.log(key, {
+          name: value.name,
+          type: value.type,
+          size: value.size,
+        });
+      } else {
+        console.log(key, value);
+      }
+    }
+
+    console.log("======================================");
+  }
+
+  /*
    * ------------------------------------------------------------
-   * Create
+   * CREATE
    * ------------------------------------------------------------
    */
 
@@ -532,11 +813,15 @@ const Clothes = () => {
 
       const formData = createFormData();
 
+      logFormData(formData);
+
       await axios.post("/api/clothes/createClothes", formData, {
         withCredentials: true,
 
         onUploadProgress: (progressEvent) => {
-          if (!progressEvent.total) return;
+          if (!progressEvent.total) {
+            return;
+          }
 
           const percent = Math.round(
             (progressEvent.loaded * 100) / progressEvent.total,
@@ -551,7 +836,9 @@ const Clothes = () => {
       await getClothes(false);
 
       setModalOpen(false);
+
       resetModalState();
+
       setError("");
     } catch (error) {
       console.error(
@@ -573,7 +860,7 @@ const Clothes = () => {
 
   /*
    * ------------------------------------------------------------
-   * Update
+   * UPDATE
    * ------------------------------------------------------------
    */
 
@@ -590,11 +877,15 @@ const Clothes = () => {
 
       const formData = createFormData();
 
+      logFormData(formData);
+
       await axios.put(`/api/clothes/updateClothes/${editingId}`, formData, {
         withCredentials: true,
 
         onUploadProgress: (progressEvent) => {
-          if (!progressEvent.total) return;
+          if (!progressEvent.total) {
+            return;
+          }
 
           const percent = Math.round(
             (progressEvent.loaded * 100) / progressEvent.total,
@@ -609,7 +900,9 @@ const Clothes = () => {
       await getClothes(false);
 
       setModalOpen(false);
+
       resetModalState();
+
       setError("");
     } catch (error) {
       console.error(
@@ -629,12 +922,20 @@ const Clothes = () => {
     }
   }
 
+  /*
+   * ------------------------------------------------------------
+   * SUBMIT
+   * ------------------------------------------------------------
+   */
+
   async function handleSubmit(event) {
     event.preventDefault();
 
     if (operationLoading) {
       return;
     }
+
+    setError("");
 
     if (!form.customer_name.trim()) {
       setError("Customer name is required.");
@@ -643,6 +944,13 @@ const Clothes = () => {
 
     if (!form.contact.trim()) {
       setError("Customer contact is required.");
+      return;
+    }
+
+    const clothCount = Number(form.cloth_count);
+
+    if (!Number.isInteger(clothCount) || clothCount < 1) {
+      setError("Number of clothes must be at least 1.");
       return;
     }
 
@@ -661,6 +969,23 @@ const Clothes = () => {
       return;
     }
 
+    /*
+     * On CREATE, require every cloth to have a photo.
+     *
+     * Because order_clothes.cloth_photo is NOT NULL.
+     */
+    if (!editMode) {
+      const missingPhoto = Array.from(
+        { length: clothCount },
+        (_, index) => !(form.cloth_photos?.[index] instanceof File),
+      ).some(Boolean);
+
+      if (missingPhoto) {
+        setError("Please upload a photo for every cloth.");
+        return;
+      }
+    }
+
     if (editMode) {
       await updateClothes();
     } else {
@@ -670,7 +995,7 @@ const Clothes = () => {
 
   /*
    * ------------------------------------------------------------
-   * Status
+   * STATUS
    * ------------------------------------------------------------
    */
 
@@ -691,10 +1016,6 @@ const Clothes = () => {
         },
       );
 
-      /*
-       * Reuse getClothes() instead of duplicating
-       * fetching logic.
-       */
       await getClothes(false);
     } catch (error) {
       console.error(
@@ -712,7 +1033,7 @@ const Clothes = () => {
 
   /*
    * ------------------------------------------------------------
-   * Data
+   * DATA
    * ------------------------------------------------------------
    */
 
@@ -772,7 +1093,7 @@ const Clothes = () => {
 
   /*
    * ------------------------------------------------------------
-   * Render helpers
+   * Photo rendering
    * ------------------------------------------------------------
    */
 
@@ -793,7 +1114,7 @@ const Clothes = () => {
 
     return (
       <img
-        src={photo.thumbnail}
+        src={photo.thumbnail || photo.url || ""}
         alt={alt}
         loading="lazy"
         onClick={() => openPhoto(photo)}
@@ -806,7 +1127,37 @@ const Clothes = () => {
     );
   }
 
+  function renderClothPhotos(item, size = "110px") {
+    if (!item.clothes || item.clothes.length === 0) {
+      return <div className="text-xs text-gray-400">No cloth photos</div>;
+    }
+
+    return (
+      <div className="flex flex-wrap gap-2">
+        {item.clothes.map((cloth) => (
+          <div key={cloth.id || cloth.cloth_number} className="relative">
+            {renderPhoto(
+              cloth.cloth_photo,
+              `Cloth ${cloth.cloth_number}`,
+              size,
+            )}
+
+            <span className="absolute bottom-1 left-1 rounded bg-black/65 px-1.5 py-0.5 text-[10px] font-medium text-white">
+              #{cloth.cloth_number}
+            </span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   const currentStatus = activeFilter === "all" ? null : getStatus(activeFilter);
+
+  /*
+   * ------------------------------------------------------------
+   * RENDER
+   * ------------------------------------------------------------
+   */
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#f8f9fb]">
@@ -949,7 +1300,7 @@ const Clothes = () => {
                 <>
                   {/* Desktop */}
                   <div className="hidden overflow-x-auto md:block">
-                    <table className="w-full min-w-[1350px] table-fixed">
+                    <table className="w-full min-w-[1500px]">
                       <thead>
                         <tr className="border-b border-gray-100 bg-gray-50/70">
                           <th className="w-[220px] px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-400">
@@ -960,8 +1311,8 @@ const Clothes = () => {
                             Contact
                           </th>
 
-                          <th className="w-[180px] px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-400">
-                            Cloth
+                          <th className="w-[400px] px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-400">
+                            Clothes
                           </th>
 
                           <th className="w-[180px] px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-400">
@@ -1030,13 +1381,9 @@ const Clothes = () => {
                                 </div>
                               </td>
 
-                              {/* Cloth */}
+                              {/* Clothes */}
                               <td className="px-6 py-4 align-middle">
-                                {renderPhoto(
-                                  item.clothPhoto,
-                                  `${item.customerName} cloth`,
-                                  "136px",
-                                )}
+                                {renderClothPhotos(item)}
                               </td>
 
                               {/* Note */}
@@ -1044,7 +1391,7 @@ const Clothes = () => {
                                 {renderPhoto(
                                   item.notePhoto,
                                   `${item.customerName} note`,
-                                  "136px",
+                                  "110px",
                                 )}
                               </td>
 
@@ -1055,7 +1402,7 @@ const Clothes = () => {
                                     item.remainderDate,
                                   )}`}
                                 >
-                                  <Bell size={15} className="shrink-0" />
+                                  <Bell size={15} />
 
                                   <span>{formatDate(item.remainderDate)}</span>
                                 </div>
@@ -1183,22 +1530,22 @@ const Clothes = () => {
                             </span>
                           </div>
 
-                          <div className="mt-4 flex gap-3">
-                            <div>
-                              <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-gray-400">
-                                Cloth
-                              </p>
+                          {/* Clothes */}
+                          <div className="mt-4">
+                            <p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-gray-400">
+                              Clothes
+                            </p>
 
-                              {renderPhoto(item.clothPhoto, "Cloth", "128px")}
-                            </div>
+                            {renderClothPhotos(item, "100px")}
+                          </div>
 
-                            <div>
-                              <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-gray-400">
-                                Note
-                              </p>
+                          {/* Note */}
+                          <div className="mt-4">
+                            <p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-gray-400">
+                              Note
+                            </p>
 
-                              {renderPhoto(item.notePhoto, "Note", "128px")}
-                            </div>
+                            {renderPhoto(item.notePhoto, "Note", "100px")}
                           </div>
 
                           <div className="mt-4 grid grid-cols-1 gap-2">
@@ -1319,10 +1666,14 @@ const Clothes = () => {
         </main>
       </div>
 
-      {/* Modal */}
+      {/* ========================================================
+          MODAL
+          ======================================================== */}
+
       {modalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
-          <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+          <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+            {/* Modal header */}
             <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4 sm:px-6">
               <div>
                 <h2 className="text-lg font-semibold text-[#172033]">
@@ -1331,7 +1682,7 @@ const Clothes = () => {
 
                 <p className="mt-1 text-xs text-gray-400">
                   {editMode
-                    ? "Update customer, photos, dates and status."
+                    ? "Update customer details and replace only the photos you need."
                     : "Add customer details and clothing order."}
                 </p>
               </div>
@@ -1409,7 +1760,7 @@ const Clothes = () => {
                   </div>
                 </div>
 
-                {/* Photos */}
+                {/* Clothing photos */}
                 <div>
                   <div className="mb-4 flex items-center gap-3">
                     <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#f1e6c9] text-[#8f681d]">
@@ -1422,135 +1773,246 @@ const Clothes = () => {
                       </h3>
 
                       <p className="text-xs text-gray-400">
-                        Upload or replace cloth and measurement photos
+                        Each cloth has its own photo.
                       </p>
                     </div>
                   </div>
 
+                  {/* Count */}
+                  <div className="mb-5">
+                    <label className="mb-2 block text-sm font-medium text-gray-700">
+                      Number of Clothes
+                    </label>
+
+                    <input
+                      type="number"
+                      min="1"
+                      max="50"
+                      value={form.cloth_count}
+                      onChange={handleClothCountChange}
+                      disabled={operationLoading}
+                      readOnly={editMode}
+                      className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-700 outline-none transition focus:border-[#d9a441] focus:ring-2 focus:ring-[#d9a441]/20 disabled:bg-gray-50"
+                    />
+
+                    <p className="mt-1 text-xs text-gray-400">
+                      Enter how many clothes are included in this order.
+                    </p>
+                  </div>
+
+                  {/* Cloth cards */}
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    {/* Cloth */}
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-gray-700">
-                        Cloth Photo
-                      </label>
+                    {Array.from(
+                      {
+                        length: Number(form.cloth_count) || 1,
+                      },
+                      (_, index) => {
+                        const existing =
+                          form.existing_cloth_photos?.[index] || null;
 
-                      {clothPreview ? (
-                        <div className="relative overflow-hidden rounded-xl border border-gray-200">
-                          <img
-                            src={clothPreview}
-                            alt="Cloth preview"
-                            className="h-52 w-full object-cover"
-                          />
+                        const newFile = form.cloth_photos?.[index] || null;
 
-                          {operationLoading && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-                              <Loader2
-                                size={28}
-                                className="animate-spin text-white"
-                              />
-                            </div>
-                          )}
+                        const preview = clothPreviews[index] || "";
 
-                          <button
-                            type="button"
-                            onClick={removeClothPhoto}
-                            disabled={operationLoading}
-                            className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white transition hover:bg-black/80 disabled:opacity-50"
+                        /*
+                         * If user selected a new file,
+                         * show new preview.
+                         *
+                         * Otherwise show existing Drive photo.
+                         */
+                        const imagePreview =
+                          preview || existing?.cloth_photo?.thumbnail || "";
+
+                        return (
+                          <div
+                            key={index}
+                            className="rounded-xl border border-gray-200 bg-gray-50/50 p-3"
                           >
-                            <X size={16} />
-                          </button>
-                        </div>
-                      ) : (
-                        <label className="flex h-52 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-gray-300 bg-gray-50 transition hover:border-[#d9a441] hover:bg-[#fffaf0]">
-                          {operationLoading ? (
-                            <Loader2
-                              size={25}
-                              className="animate-spin text-[#d9a441]"
-                            />
-                          ) : (
-                            <Upload size={25} className="text-gray-400" />
-                          )}
+                            <div className="mb-2 flex items-center justify-between">
+                              <label className="text-sm font-medium text-gray-700">
+                                Cloth {index + 1}
+                              </label>
 
-                          <p className="mt-3 text-sm font-medium text-gray-600">
-                            Upload cloth photo
-                          </p>
+                              {newFile && (
+                                <span className="rounded-full bg-green-50 px-2 py-1 text-[10px] font-medium text-green-700">
+                                  New photo
+                                </span>
+                              )}
 
-                          <p className="mt-1 text-xs text-gray-400">
-                            PNG, JPG up to 5MB
-                          </p>
-
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={handleClothPhoto}
-                            disabled={operationLoading}
-                            className="hidden"
-                          />
-                        </label>
-                      )}
-                    </div>
-
-                    {/* Note */}
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-gray-700">
-                        Note / Measurement Photo
-                      </label>
-
-                      {notePreview ? (
-                        <div className="relative overflow-hidden rounded-xl border border-gray-200">
-                          <img
-                            src={notePreview}
-                            alt="Note preview"
-                            className="h-52 w-full object-cover"
-                          />
-
-                          {operationLoading && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-                              <Loader2
-                                size={28}
-                                className="animate-spin text-white"
-                              />
+                              {!newFile && existing && (
+                                <span className="rounded-full bg-blue-50 px-2 py-1 text-[10px] font-medium text-blue-700">
+                                  Existing
+                                </span>
+                              )}
                             </div>
-                          )}
+
+                            {imagePreview ? (
+                              <div className="relative overflow-hidden rounded-xl border border-gray-200 bg-white">
+                                <img
+                                  src={imagePreview}
+                                  alt={`Cloth ${index + 1}`}
+                                  className="h-52 w-full object-cover"
+                                />
+
+                                {operationLoading && (
+                                  <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                                    <Loader2
+                                      size={28}
+                                      className="animate-spin text-white"
+                                    />
+                                  </div>
+                                )}
+
+                                <div className="absolute right-2 top-2 flex gap-2">
+                                  <label className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-black/60 text-white transition hover:bg-black/80">
+                                    <Pencil size={14} />
+
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      onChange={(event) =>
+                                        handleClothPhoto(event, index)
+                                      }
+                                      disabled={operationLoading}
+                                      className="hidden"
+                                    />
+                                  </label>
+
+                                  {newFile && (
+                                    <button
+                                      type="button"
+                                      onClick={() => removeSelectedCloth(index)}
+                                      disabled={operationLoading}
+                                      className="flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white transition hover:bg-black/80 disabled:opacity-50"
+                                    >
+                                      <X size={15} />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            ) : (
+                              <label className="flex h-52 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-gray-300 bg-gray-50 transition hover:border-[#d9a441] hover:bg-[#fffaf0]">
+                                {operationLoading ? (
+                                  <Loader2
+                                    size={25}
+                                    className="animate-spin text-[#d9a441]"
+                                  />
+                                ) : (
+                                  <Upload size={25} className="text-gray-400" />
+                                )}
+
+                                <p className="mt-3 text-sm font-medium text-gray-600">
+                                  Upload Cloth {index + 1}
+                                </p>
+
+                                <p className="mt-1 text-xs text-gray-400">
+                                  PNG, JPG up to 5MB
+                                </p>
+
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={(event) =>
+                                    handleClothPhoto(event, index)
+                                  }
+                                  disabled={operationLoading}
+                                  className="hidden"
+                                />
+                              </label>
+                            )}
+
+                            {editMode && existing && !newFile && (
+                              <p className="mt-2 text-[11px] text-gray-400">
+                                Existing photo will remain unchanged unless you
+                                replace it.
+                              </p>
+                            )}
+                          </div>
+                        );
+                      },
+                    )}
+                  </div>
+
+                  {/* Note */}
+                  <div className="mt-5">
+                    <label className="mb-2 block text-sm font-medium text-gray-700">
+                      Note / Measurement Photo
+                    </label>
+
+                    {notePreview ? (
+                      <div className="relative overflow-hidden rounded-xl border border-gray-200">
+                        <img
+                          src={notePreview}
+                          alt="Note preview"
+                          className="h-52 w-full object-cover"
+                        />
+
+                        {operationLoading && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                            <Loader2
+                              size={28}
+                              className="animate-spin text-white"
+                            />
+                          </div>
+                        )}
+
+                        <div className="absolute right-2 top-2 flex gap-2">
+                          <label className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-black/60 text-white transition hover:bg-black/80">
+                            <Pencil size={14} />
+
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleNotePhoto}
+                              disabled={operationLoading}
+                              className="hidden"
+                            />
+                          </label>
 
                           <button
                             type="button"
                             onClick={removeNotePhoto}
                             disabled={operationLoading}
-                            className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white transition hover:bg-black/80 disabled:opacity-50"
+                            className="flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white transition hover:bg-black/80 disabled:opacity-50"
                           >
                             <X size={16} />
                           </button>
                         </div>
-                      ) : (
-                        <label className="flex h-52 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-gray-300 bg-gray-50 transition hover:border-[#d9a441] hover:bg-[#fffaf0]">
-                          {operationLoading ? (
-                            <Loader2
-                              size={25}
-                              className="animate-spin text-[#d9a441]"
-                            />
-                          ) : (
-                            <Upload size={25} className="text-gray-400" />
-                          )}
-
-                          <p className="mt-3 text-sm font-medium text-gray-600">
-                            Upload note photo
-                          </p>
-
-                          <p className="mt-1 text-xs text-gray-400">
-                            PNG, JPG up to 5MB
-                          </p>
-
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={handleNotePhoto}
-                            disabled={operationLoading}
-                            className="hidden"
+                      </div>
+                    ) : (
+                      <label className="flex h-52 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-gray-300 bg-gray-50 transition hover:border-[#d9a441] hover:bg-[#fffaf0]">
+                        {operationLoading ? (
+                          <Loader2
+                            size={25}
+                            className="animate-spin text-[#d9a441]"
                           />
-                        </label>
-                      )}
-                    </div>
+                        ) : (
+                          <Upload size={25} className="text-gray-400" />
+                        )}
+
+                        <p className="mt-3 text-sm font-medium text-gray-600">
+                          Upload note photo
+                        </p>
+
+                        <p className="mt-1 text-xs text-gray-400">
+                          PNG, JPG up to 5MB
+                        </p>
+
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleNotePhoto}
+                          disabled={operationLoading}
+                          className="hidden"
+                        />
+                      </label>
+                    )}
+
+                    {editMode && removeNote && (
+                      <p className="mt-2 text-xs text-red-500">
+                        Note photo will be removed.
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -1657,7 +2119,7 @@ const Clothes = () => {
                       <Loader2 size={16} className="animate-spin" />
 
                       {editMode
-                        ? `Updating Details... ${uploadProgress}%`
+                        ? `Updating... ${uploadProgress}%`
                         : `Adding Customer... ${uploadProgress}%`}
                     </>
                   ) : editMode ? (
