@@ -280,7 +280,6 @@ const Dashboard = () => {
     return [
       ...(dashboard.reminders?.passed || []),
       ...(dashboard.reminders?.today || []),
-      ...(dashboard.reminders?.upcoming || []),
     ];
   }, [dashboard.reminders]);
 
@@ -488,219 +487,257 @@ const Dashboard = () => {
                 REMINDER TABLE
             ================================================= */}
 
-            <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-              {/* Header */}
-              <div className="flex flex-col gap-4 border-b border-gray-100 px-4 py-4 sm:px-6 sm:py-5 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#f1e6c9] text-[#8f681d]">
-                    <Bell size={19} />
-                  </div>
+            <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+              <div className="flex flex-col gap-3 border-b border-gray-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">
+                    Today's & Overdue Orders
+                  </h2>
 
-                  <div>
-                    <h2 className="font-semibold text-[#172033]">
-                      Customer Reminders
-                    </h2>
-
-                    <p className="text-xs text-gray-400">
-                      Passed, today's and upcoming reminders
-                    </p>
-                  </div>
+                  <p className="text-sm text-gray-500">
+                    Today's reminders and overdue pending orders
+                  </p>
                 </div>
 
-                <div className="flex flex-wrap gap-2 text-xs">
-                  <span className="rounded-full bg-red-50 px-3 py-1.5 text-red-600">
-                    Passed: {summary.passedReminders}
+                <div className="flex flex-wrap gap-2">
+                  <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-medium text-red-600">
+                    Passed: {dashboard.summary.passedReminders}
                   </span>
 
-                  <span className="rounded-full bg-amber-50 px-3 py-1.5 text-amber-600">
-                    Today: {summary.todayReminders}
-                  </span>
-
-                  <span className="rounded-full bg-gray-100 px-3 py-1.5 text-gray-600">
-                    Upcoming: {summary.upcomingReminders}
+                  <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-600">
+                    Today: {dashboard.summary.todayReminders}
                   </span>
                 </div>
               </div>
 
-              {/* Loading */}
-              {loading ? (
-                <div className="flex flex-col items-center justify-center py-20">
-                  <Loader2 size={32} className="animate-spin text-[#d9a441]" />
+              {reminders.length === 0 ? (
+                <div className="flex min-h-[250px] items-center justify-center px-5">
+                  <div className="text-center">
+                    <p className="text-sm font-medium text-gray-600">
+                      No reminders for today
+                    </p>
 
-                  <p className="mt-3 text-sm text-gray-400">
-                    Loading reminders...
-                  </p>
-                </div>
-              ) : reminders.length === 0 ? (
-                /* Empty */
-                <div className="px-6 py-16 text-center">
-                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-400">
-                    <Bell size={22} />
+                    <p className="mt-1 text-xs text-gray-400">
+                      There are no overdue pending orders either.
+                    </p>
                   </div>
-
-                  <h3 className="mt-4 text-sm font-semibold text-[#172033]">
-                    No pending reminders
-                  </h3>
-
-                  <p className="mt-1 text-xs text-gray-400">
-                    There are currently no active customer reminders.
-                  </p>
                 </div>
               ) : (
-                /* Table */
-                <div className="w-full overflow-x-auto">
-                  <table className="w-full min-w-[1050px]">
-                    <thead>
-                      <tr className="border-b border-gray-100 bg-gray-50/70">
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-400 sm:px-6 sm:py-4">
-                          Customer
-                        </th>
+                <>
+                  {/* DESKTOP */}
+                  <div className="hidden overflow-x-auto md:block">
+                    <table className="w-full min-w-[1000px]">
+                      <thead>
+                        <tr className="border-b border-gray-100 bg-gray-50">
+                          <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                            Customer
+                          </th>
 
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-400 sm:px-6 sm:py-4">
-                          Cloth
-                        </th>
+                          <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                            Contact
+                          </th>
 
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-400 sm:px-6 sm:py-4">
-                          Note
-                        </th>
+                          <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                            Cloth
+                          </th>
 
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-400 sm:px-6 sm:py-4">
-                          Reminder
-                        </th>
+                          <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                            Note
+                          </th>
 
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-400 sm:px-6 sm:py-4">
-                          Delivery
-                        </th>
+                          <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                            Reminder
+                          </th>
 
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-400 sm:px-6 sm:py-4">
-                          Status
-                        </th>
+                          <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                            Delivery
+                          </th>
 
-                        <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-400 sm:px-6 sm:py-4">
-                          Action
-                        </th>
-                      </tr>
-                    </thead>
+                          <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                            Status
+                          </th>
+                        </tr>
+                      </thead>
 
-                    <tbody className="divide-y divide-gray-100">
-                      {reminders.map((item) => {
-                        const status = getReminderStatus(item.reminder_status);
-
-                        const StatusIcon = status.icon;
-
-                        return (
+                      <tbody className="divide-y divide-gray-100">
+                        {reminders.map((item) => (
                           <tr
-                            key={item.id}
-                            className="transition hover:bg-gray-50/70"
+                            key={`${item.reminder_status}-${item.id}`}
+                            className="transition hover:bg-gray-50"
                           >
-                            {/* Customer */}
-                            <td className="px-4 py-3 align-middle sm:px-6 sm:py-4">
-                              <div className="flex items-center gap-3">
-                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#f1e6c9] text-[#8f681d]">
-                                  <User size={17} />
-                                </div>
+                            {/* CUSTOMER */}
+                            <td className="px-5 py-4">
+                              <div>
+                                <p className="font-semibold text-gray-900">
+                                  {item.customer_name || "No name"}
+                                </p>
 
-                                <div className="min-w-0">
-                                  <p className="whitespace-nowrap text-sm font-medium text-[#172033]">
-                                    {item.customer_name || "Unknown Customer"}
-                                  </p>
-
-                                  <p className="text-xs text-gray-400">
-                                    Order #{String(item.id).padStart(4, "0")}
-                                  </p>
-                                </div>
+                                <p className="mt-1 text-xs text-gray-400">
+                                  Order #{item.id}
+                                </p>
                               </div>
                             </td>
 
-                            {/* Cloth */}
-                            <td className="px-4 py-3 align-middle sm:px-6 sm:py-4">
-                              {renderPhoto(
-                                item.cloth_photo,
-                                `${item.customer_name} cloth`,
-                                "80px",
-                              )}
-                            </td>
-
-                            {/* Note */}
-                            <td className="px-4 py-3 align-middle sm:px-6 sm:py-4">
-                              {renderPhoto(
-                                item.note_photo,
-                                `${item.customer_name} note`,
-                                "80px",
-                              )}
-                            </td>
-
-                            {/* Reminder */}
-                            <td className="px-4 py-3 align-middle sm:px-6 sm:py-4">
-                              <div
-                                className={`flex min-w-[125px] items-center gap-2 whitespace-nowrap text-sm ${
-                                  item.reminder_status === "today"
-                                    ? "text-amber-600"
-                                    : item.reminder_status === "passed"
-                                      ? "text-red-600"
-                                      : "text-gray-600"
-                                }`}
-                              >
-                                <Bell size={15} className="shrink-0" />
-
-                                <span>{formatDate(item.remainder_date)}</span>
-                              </div>
-                            </td>
-
-                            {/* Delivery */}
-                            <td className="px-4 py-3 align-middle sm:px-6 sm:py-4">
-                              <div className="flex min-w-[125px] items-center gap-2 whitespace-nowrap text-sm text-gray-600">
-                                <CalendarDays
-                                  size={15}
-                                  className="shrink-0 text-gray-400"
-                                />
-
-                                <span>{formatDate(item.delivery_date)}</span>
-                              </div>
-                            </td>
-
-                            {/* Status */}
-                            <td className="px-4 py-3 align-middle sm:px-6 sm:py-4">
-                              <span
-                                className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium ${status.className}`}
-                              >
-                                <StatusIcon size={13} />
-
-                                {status.label}
+                            {/* CONTACT */}
+                            <td className="px-5 py-4">
+                              <span className="text-sm text-gray-700">
+                                {item.contact || "-"}
                               </span>
                             </td>
 
-                            {/* Action */}
-                            <td className="px-4 py-3 text-right align-middle sm:px-6 sm:py-4">
-                              <button
-                                type="button"
-                                onClick={() => openPhoto(item.cloth_photo)}
-                                disabled={!item.cloth_photo}
-                                className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 transition hover:border-[#d9a441] hover:bg-[#fffaf0] hover:text-[#8f681d] disabled:cursor-not-allowed disabled:opacity-50"
+                            {/* CLOTH PHOTO */}
+                            <td className="px-5 py-4">
+                              {renderPhoto(
+                                item.cloth_photo,
+                                `${item.customer_name || "Customer"} cloth`,
+                                "80px",
+                              )}
+                            </td>
+
+                            {/* NOTE PHOTO */}
+                            <td className="px-5 py-4">
+                              {renderPhoto(
+                                item.note_photo,
+                                `${item.customer_name || "Customer"} note`,
+                                "80px",
+                              )}
+                            </td>
+
+                            {/* REMINDER */}
+                            <td className="px-5 py-4">
+                              <span
+                                className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${
+                                  item.reminder_status === "passed"
+                                    ? "bg-red-50 text-red-600"
+                                    : "bg-blue-50 text-blue-600"
+                                }`}
                               >
-                                <Eye size={15} />
-                                View
-                              </button>
+                                {item.reminder_status === "passed"
+                                  ? "Passed"
+                                  : "Today"}
+                              </span>
+
+                              <p className="mt-1 text-sm text-gray-700">
+                                {formatDate(item.remainder_date)}
+                              </p>
+                            </td>
+
+                            {/* DELIVERY */}
+                            <td className="px-5 py-4">
+                              <span className="text-sm text-gray-700">
+                                {item.delivery_date
+                                  ? formatDate(item.delivery_date)
+                                  : "-"}
+                              </span>
+                            </td>
+
+                            {/* STATUS */}
+                            <td className="px-5 py-4">
+                              <span
+                                className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${
+                                  item.status === "pending"
+                                    ? "bg-amber-50 text-amber-600"
+                                    : item.status === "ready"
+                                      ? "bg-green-50 text-green-600"
+                                      : "bg-gray-100 text-gray-600"
+                                }`}
+                              >
+                                {item.status}
+                              </span>
                             </td>
                           </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
 
-              {/* Footer */}
-              {!loading && reminders.length > 0 && (
-                <div className="border-t border-gray-100 px-4 py-4 sm:px-6">
-                  <p className="text-xs text-gray-400">
-                    Showing{" "}
-                    <span className="font-medium text-gray-500">
-                      {reminders.length}
-                    </span>{" "}
-                    customer reminders
-                  </p>
-                </div>
+                  {/* MOBILE */}
+                  <div className="divide-y divide-gray-100 md:hidden">
+                    {reminders.map((item) => (
+                      <div
+                        key={`${item.reminder_status}-${item.id}`}
+                        className="p-4"
+                      >
+                        {/* CUSTOMER */}
+                        <div className="mb-4 flex items-start justify-between gap-3">
+                          <div>
+                            <h3 className="font-semibold text-gray-900">
+                              {item.customer_name || "No name"}
+                            </h3>
+
+                            <p className="mt-1 text-sm text-gray-500">
+                              {item.contact || "No contact"}
+                            </p>
+
+                            <p className="mt-1 text-xs text-gray-400">
+                              Order #{item.id}
+                            </p>
+                          </div>
+
+                          <span
+                            className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${
+                              item.reminder_status === "passed"
+                                ? "bg-red-50 text-red-600"
+                                : "bg-blue-50 text-blue-600"
+                            }`}
+                          >
+                            {item.reminder_status === "passed"
+                              ? "Passed"
+                              : "Today"}
+                          </span>
+                        </div>
+
+                        {/* PHOTOS */}
+                        <div className="flex gap-3">
+                          <div>
+                            <p className="mb-1 text-xs font-medium text-gray-400">
+                              Cloth
+                            </p>
+
+                            {renderPhoto(item.cloth_photo, "Cloth", "90px")}
+                          </div>
+
+                          <div>
+                            <p className="mb-1 text-xs font-medium text-gray-400">
+                              Note
+                            </p>
+
+                            {renderPhoto(item.note_photo, "Note", "90px")}
+                          </div>
+                        </div>
+
+                        {/* DETAILS */}
+                        <div className="mt-4 grid grid-cols-2 gap-3">
+                          <div>
+                            <p className="text-xs text-gray-400">Reminder</p>
+
+                            <p className="mt-1 text-sm font-medium text-gray-700">
+                              {formatDate(item.remainder_date)}
+                            </p>
+                          </div>
+
+                          <div>
+                            <p className="text-xs text-gray-400">Delivery</p>
+
+                            <p className="mt-1 text-sm font-medium text-gray-700">
+                              {item.delivery_date
+                                ? formatDate(item.delivery_date)
+                                : "-"}
+                            </p>
+                          </div>
+
+                          <div>
+                            <p className="text-xs text-gray-400">Status</p>
+
+                            <p className="mt-1 text-sm font-medium capitalize text-gray-700">
+                              {item.status}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
               )}
             </div>
           </div>
