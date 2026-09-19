@@ -22,7 +22,7 @@ import {
 import Navbar from "./Navbar";
 import Sidebar from "./Sidebar";
 
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
 
 const emptyForm = {
   customer_name: "",
