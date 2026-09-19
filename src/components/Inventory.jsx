@@ -64,7 +64,9 @@ function Inventory() {
       setLoading(true);
       setError("");
 
-      const response = await axios.get("/api/inventory/getInventory");
+      const response = await axios.get("/api/inventory/getInventory", {
+        withCredentials: true,
+      });
 
       const data = response.data;
 
@@ -194,12 +196,16 @@ function Inventory() {
       setSubmitting(true);
       setError("");
 
-      const response = await axios.post("/api/inventory/createInventory", {
-        cloth_name: form.clothName.trim(),
-        quantity: Number(form.quantity),
-        buying_price: Number(form.buyingPrice),
-        selling_price: Number(form.sellingPrice),
-      });
+      const response = await axios.post(
+        "/api/inventory/createInventory",
+        {
+          cloth_name: form.clothName.trim(),
+          quantity: Number(form.quantity),
+          buying_price: Number(form.buyingPrice),
+          selling_price: Number(form.sellingPrice),
+        },
+        { withCredentials: true },
+      );
 
       console.log("Inventory created:", response.data);
 
@@ -227,12 +233,16 @@ function Inventory() {
 
       const id = selectedItem.id;
 
-      const response = await axios.put(`/api/inventory/updateInventory/${id}`, {
-        cloth_name: form.clothName.trim(),
-        quantity: newQuantity,
-        buying_price: Number(form.buyingPrice),
-        selling_price: Number(form.sellingPrice),
-      });
+      const response = await axios.put(
+        `/api/inventory/updateInventory/${id}`,
+        {
+          cloth_name: form.clothName.trim(),
+          quantity: newQuantity,
+          buying_price: Number(form.buyingPrice),
+          selling_price: Number(form.sellingPrice),
+        },
+        { withCredentials: true },
+      );
 
       console.log("Inventory updated:", response.data);
 

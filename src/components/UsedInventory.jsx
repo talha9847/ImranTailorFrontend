@@ -52,6 +52,7 @@ const UsedInventory = () => {
 
       const response = await axios.get(
         "/api/inventory-usage/getInventoryProducts",
+        { withCredentials: true },
       );
 
       const products = response.data?.data || response.data || [];
@@ -80,6 +81,7 @@ const UsedInventory = () => {
         params: {
           date: date,
         },
+        withCredentials: true,
       });
 
       const usage = response.data?.data || response.data;
@@ -171,7 +173,9 @@ const UsedInventory = () => {
     try {
       setLoadingHistory(true);
 
-      const response = await axios.get("/api/inventory-usage/getUsageHistory");
+      const response = await axios.get("/api/inventory-usage/getUsageHistory", {
+        withCredentials: true,
+      });
 
       const data = response.data?.data || response.data || [];
 
@@ -314,11 +318,15 @@ const UsedInventory = () => {
     try {
       setSavingProductId(id);
 
-      const response = await axios.post("/api/inventory-usage/saveUsageItem", {
-        usage_date: selectedDate,
-        inventory_id: product.id,
-        quantity: product.usedQty,
-      });
+      const response = await axios.post(
+        "/api/inventory-usage/saveUsageItem",
+        {
+          usage_date: selectedDate,
+          inventory_id: product.id,
+          quantity: product.usedQty,
+        },
+        { withCredentials: true },
+      );
 
       console.log("Usage saved:", response.data);
 
