@@ -16,11 +16,14 @@ import {
 
 import Navbar from "./Navbar";
 import Sidebar from "./Sidebar";
+import { useNavigate } from "react-router-dom";
 
 const UsedInventory = () => {
   const [selectedDate, setSelectedDate] = useState(() => {
     return new Date().toISOString().split("T")[0];
   });
+
+  const navigate = useNavigate();
 
   // =========================================================
   // STATE
@@ -438,9 +441,20 @@ const UsedInventory = () => {
 
       <div className="min-h-screen md:ml-64">
         <Navbar
-          onLogout={() => {
-            localStorage.removeItem("token");
-            window.location.href = "/login";
+          onLogout={async () => {
+            try {
+              await axios.post(
+                "/api/auth/logout",
+                {},
+                {
+                  withCredentials: true,
+                },
+              );
+
+              navigate("/");
+            } catch (error) {
+              console.error("Logout error:", error);
+            }
           }}
         />
 

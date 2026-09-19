@@ -97,10 +97,21 @@ const Clothes = () => {
    * ------------------------------------------------------------
    */
 
-  function handleLogout() {
-    localStorage.removeItem("token");
-    window.location.href = "/login";
-  }
+  const handleLogout = async () => {
+    try {
+      await axios.post(
+        "/api/auth/logout",
+        {},
+        {
+          withCredentials: true,
+        },
+      );
+
+      window.location.href = "/login";
+    } catch (error) {
+      console.error("Logout error:", error);
+    }
+  };
 
   function normalizeDateValue(value) {
     if (!value) return "";

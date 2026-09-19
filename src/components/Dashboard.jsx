@@ -14,6 +14,7 @@ import {
 
 import Navbar from "./Navbar";
 import Sidebar from "./Sidebar";
+import { useNavigate } from "react-router-dom";
 
 const emptyDashboard = {
   summary: {
@@ -40,11 +41,23 @@ const Dashboard = () => {
   useEffect(() => {
     getDashboard();
   }, []);
+  const navigate = useNavigate();
 
-  function handleLogout() {
-    localStorage.removeItem("token");
-    window.location.href = "/login";
-  }
+  const handleLogout = async () => {
+    try {
+      await axios.post(
+        "/api/auth/logout",
+        {},
+        {
+          withCredentials: true,
+        },
+      );
+
+      navigate("/");
+    } catch (error) {
+      console.error("Logout error:", error);
+    }
+  };
 
   function normalizeDateValue(value) {
     if (!value) {

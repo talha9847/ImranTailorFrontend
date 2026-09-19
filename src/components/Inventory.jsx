@@ -13,6 +13,7 @@ import {
 import Navbar from "./Navbar";
 import Sidebar from "./Sidebar";
 import axios from "axios";
+import { useNavigate } from "react-router-dom";
 
 const API_URL = "http://localhost:5000";
 
@@ -280,14 +281,23 @@ function Inventory() {
       await updateInventory();
     }
   }
+  const navigate = useNavigate();
 
-  // =========================
-  // LOGOUT
-  // =========================
-  function handleLogout() {
-    localStorage.removeItem("token");
-    window.location.href = "/login";
-  }
+  const handleLogout = async () => {
+    try {
+      await axios.post(
+        "/api/auth/logout",
+        {},
+        {
+          withCredentials: true,
+        },
+      );
+
+      navigate("/");
+    } catch (error) {
+      console.error("Logout error:", error);
+    }
+  };
 
   // =========================
   // TOTALS
