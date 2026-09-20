@@ -12,6 +12,7 @@ import {
   ChevronUp,
   X,
   ShoppingBag,
+  RotateCcw,
 } from "lucide-react";
 
 import Navbar from "./Navbar";
@@ -19,15 +20,11 @@ import Sidebar from "./Sidebar";
 import { useNavigate } from "react-router-dom";
 
 const UsedInventory = () => {
+  const navigate = useNavigate();
+
   const [selectedDate, setSelectedDate] = useState(() => {
     return new Date().toISOString().split("T")[0];
   });
-
-  const navigate = useNavigate();
-
-  // =========================================================
-  // STATE
-  // =========================================================
 
   const [inventoryProducts, setInventoryProducts] = useState([]);
   const [todayProducts, setTodayProducts] = useState([]);
@@ -44,10 +41,7 @@ const UsedInventory = () => {
   const [loadingHistory, setLoadingHistory] = useState(false);
 
   const [savingProductId, setSavingProductId] = useState(null);
-
-  // =========================================================
-  // GET INVENTORY PRODUCTS
-  // =========================================================
+  const [revertingProductId, setRevertingProductId] = useState(null);
 
   const fetchInventoryProducts = async () => {
     try {
@@ -55,12 +49,14 @@ const UsedInventory = () => {
 
       const response = await axios.get(
         "/api/inventory-usage/getInventoryProducts",
-        { withCredentials: true },
+        {
+          withCredentials: true,
+        },
       );
 
       const products = response.data?.data || response.data || [];
 
-      setInventoryProducts(products);
+      setInventoryProducts(Array.isArray(products) ? products : []);
     } catch (error) {
       console.error("Failed to fetch inventory products:", error);
 
@@ -72,49 +68,20 @@ const UsedInventory = () => {
     }
   };
 
-  // =========================================================
-  // GET USAGE BY SELECTED DATE
-  // =========================================================
-
   const fetchUsageByDate = async (date) => {
     try {
       setLoadingUsage(true);
 
       const response = await axios.get("/api/inventory-usage/getUsageByDate", {
         params: {
-          date: date,
+          date,
         },
         withCredentials: true,
       });
 
       const usage = response.data?.data || response.data;
 
-      /*
-        Expected backend response:
-
-        {
-          id: 1,
-          usage_date: "2026-09-16",
-          total_items: 8,
-          items: [
-            {
-              id: 1,
-              inventory_id: 1,
-              quantity: 3,
-              buying_price: "100.00",
-              selling_price: "200.00",
-              total_amount: "600.00",
-              inventory: {
-                id: 1,
-                cloth_name: "Cotton White Shirt",
-                quantity: 25
-              }
-            }
-          ]
-        }
-      */
-
-      if (!usage || !usage.items) {
+      if (!usage || !Array.isArray(usage.items)) {
         setTodayProducts([]);
         setSavedProducts([]);
         return;
@@ -128,27 +95,26 @@ const UsedInventory = () => {
           clothName: inventory.cloth_name || "",
           currentQty: Number(inventory.quantity || 0),
           usedQty: Number(item.quantity || 0),
-
           buyingPrice: Number(item.buying_price || 0),
           sellingPrice: Number(item.selling_price || 0),
-
-          usageItemId: item.id,
+          usageItemId: Number(item.id),
+          createdAt: item.created_at || null,
         };
       });
 
       setTodayProducts(products);
 
       setSavedProducts(
-        products
-          .filter((item) => item.usedQty > 0)
-          .map((item) => ({
-            id: item.id,
-            clothName: item.clothName,
-            quantity: item.usedQty,
-            buyingPrice: item.buyingPrice,
-            sellingPrice: item.sellingPrice,
-            totalAmount: item.usedQty * item.sellingPrice,
-          })),
+        products.map((item) => ({
+          id: item.id,
+          usageItemId: item.usageItemId,
+          clothName: item.clothName,
+          quantity: item.usedQty,
+          buyingPrice: item.buyingPrice,
+          sellingPrice: item.sellingPrice,
+          totalAmount: item.usedQty * item.sellingPrice,
+          createdAt: item.createdAt,
+        })),
       );
     } catch (error) {
       console.error("Failed to fetch usage:", error);
@@ -168,10 +134,6 @@ const UsedInventory = () => {
     }
   };
 
-  // =========================================================
-  // GET LAST 10 DAYS HISTORY
-  // =========================================================
-
   const fetchUsageHistory = async () => {
     try {
       setLoadingHistory(true);
@@ -182,7 +144,7 @@ const UsedInventory = () => {
 
       const data = response.data?.data || response.data || [];
 
-      setHistory(data);
+      setHistory(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error("Failed to fetch usage history:", error);
 
@@ -192,26 +154,14 @@ const UsedInventory = () => {
     }
   };
 
-  // =========================================================
-  // INITIAL LOAD
-  // =========================================================
-
   useEffect(() => {
     fetchInventoryProducts();
     fetchUsageHistory();
   }, []);
 
-  // =========================================================
-  // LOAD USAGE WHEN DATE CHANGES
-  // =========================================================
-
   useEffect(() => {
     fetchUsageByDate(selectedDate);
   }, [selectedDate]);
-
-  // =========================================================
-  // AVAILABLE PRODUCTS
-  // =========================================================
 
   const availableProducts = useMemo(() => {
     if (!Array.isArray(inventoryProducts)) {
@@ -224,30 +174,26 @@ const UsedInventory = () => {
     );
   }, [inventoryProducts, todayProducts]);
 
-  // =========================================================
-  // NORMALIZE INVENTORY
-  // =========================================================
-
   const normalizeInventoryProduct = (product) => ({
     id: Number(product.id),
-    clothName: product.cloth_name,
+    clothName: product.cloth_name || "",
     currentQty: Number(product.quantity || 0),
     buyingPrice: Number(product.buying_price || 0),
     sellingPrice: Number(product.selling_price || 0),
   });
 
-  // =========================================================
-  // ADD PRODUCT
-  // =========================================================
-
   const handleAddProduct = () => {
-    if (!selectedProductId) return;
+    if (!selectedProductId) {
+      return;
+    }
 
     const product = inventoryProducts.find(
       (item) => Number(item.id) === Number(selectedProductId),
     );
 
-    if (!product) return;
+    if (!product) {
+      return;
+    }
 
     const normalizedProduct = normalizeInventoryProduct(product);
 
@@ -256,6 +202,8 @@ const UsedInventory = () => {
       {
         ...normalizedProduct,
         usedQty: 0,
+        usageItemId: null,
+        createdAt: null,
       },
     ]);
 
@@ -263,22 +211,22 @@ const UsedInventory = () => {
     setShowProductModal(false);
   };
 
-  // =========================================================
-  // REMOVE PRODUCT BEFORE SAVING
-  // =========================================================
-
   const removeProduct = (id) => {
-    setTodayProducts((prev) => prev.filter((item) => item.id !== id));
+    setTodayProducts((prev) =>
+      prev.filter((item) => Number(item.id) !== Number(id)),
+    );
   };
-
-  // =========================================================
-  // UPDATE QUANTITY
-  // =========================================================
 
   const updateUsedQty = (id, type) => {
     setTodayProducts((prev) =>
       prev.map((item) => {
-        if (item.id !== id) return item;
+        if (Number(item.id) !== Number(id)) {
+          return item;
+        }
+
+        if (item.usageItemId) {
+          return item;
+        }
 
         if (type === "plus") {
           if (item.usedQty >= item.currentQty) {
@@ -307,63 +255,35 @@ const UsedInventory = () => {
     );
   };
 
-  // =========================================================
-  // SAVE PRODUCT TO DATABASE
-  // =========================================================
-
   const saveProduct = async (id) => {
-    const product = todayProducts.find((item) => item.id === id);
+    const product = todayProducts.find(
+      (item) => Number(item.id) === Number(id),
+    );
 
-    if (!product || product.usedQty === 0) {
+    if (!product || product.usedQty <= 0 || product.usageItemId) {
       return;
     }
 
     try {
       setSavingProductId(id);
 
-      const response = await axios.post(
+      await axios.post(
         "/api/inventory-usage/saveUsageItem",
         {
           usage_date: selectedDate,
           inventory_id: product.id,
           quantity: product.usedQty,
         },
-        { withCredentials: true },
+        {
+          withCredentials: true,
+        },
       );
 
-      console.log("Usage saved:", response.data);
-
-      // Update saved products immediately
-      setSavedProducts((prev) => {
-        const alreadySaved = prev.some((item) => item.id === id);
-
-        const savedItem = {
-          id: product.id,
-          clothName: product.clothName,
-          quantity: product.usedQty,
-          buyingPrice: product.buyingPrice,
-          sellingPrice: product.sellingPrice,
-          totalAmount: product.usedQty * product.sellingPrice,
-        };
-
-        if (alreadySaved) {
-          return prev.map((item) => (item.id === id ? savedItem : item));
-        }
-
-        return [...prev, savedItem];
-      });
-
-      /*
-        Refresh inventory because the backend should decrease
-        inventory.quantity after saving usage.
-      */
-      await fetchInventoryProducts();
-
-      // Refresh selected day's usage
-      await fetchUsageByDate(selectedDate);
-
-      // Refresh history
-      await fetchUsageHistory();
+      await Promise.all([
+        fetchInventoryProducts(),
+        fetchUsageByDate(selectedDate),
+        fetchUsageHistory(),
+      ]);
     } catch (error) {
       console.error("Failed to save usage:", error);
 
@@ -373,29 +293,64 @@ const UsedInventory = () => {
     }
   };
 
-  // =========================================================
-  // TOTAL TODAY
-  // =========================================================
+  const revertHistoryProduct = async (product) => {
+    const usageItemId = Number(product?.id || product?.usage_item_id);
+
+    if (!usageItemId) {
+      return;
+    }
+
+    const productName = getHistoryProductName(product);
+    const quantity = Number(product.quantity || 0);
+
+    const confirmed = window.confirm(
+      `Revert "${productName}"?\n\n${quantity} item(s) will be returned to inventory.`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setRevertingProductId(usageItemId);
+
+      await axios.post(
+        "/api/inventory-usage/revertUsageItem",
+        {
+          usage_item_id: usageItemId,
+        },
+        {
+          withCredentials: true,
+        },
+      );
+
+      await Promise.all([
+        fetchInventoryProducts(),
+        fetchUsageByDate(selectedDate),
+        fetchUsageHistory(),
+      ]);
+    } catch (error) {
+      console.error("Failed to revert history product:", error);
+
+      alert(error.response?.data?.message || "Failed to revert product");
+    } finally {
+      setRevertingProductId(null);
+    }
+  };
 
   const totalUsedToday = savedProducts.reduce(
     (total, item) => total + Number(item.quantity || 0),
     0,
   );
 
-  // =========================================================
-  // TOGGLE HISTORY
-  // =========================================================
-
   const toggleHistory = (id) => {
     setExpandedHistory((prev) => (prev === id ? null : id));
   };
 
-  // =========================================================
-  // FORMAT DATE
-  // =========================================================
-
   const formatDate = (date) => {
-    if (!date) return "";
+    if (!date) {
+      return "";
+    }
 
     const parsedDate = new Date(date);
 
@@ -410,17 +365,17 @@ const UsedInventory = () => {
     });
   };
 
-  // =========================================================
-  // GET HISTORY PRODUCTS
-  // =========================================================
-
   const getHistoryProducts = (day) => {
-    return day.items || day.products || [];
-  };
+    if (Array.isArray(day.items)) {
+      return day.items;
+    }
 
-  // =========================================================
-  // GET HISTORY PRODUCT NAME
-  // =========================================================
+    if (Array.isArray(day.products)) {
+      return day.products;
+    }
+
+    return [];
+  };
 
   const getHistoryProductName = (product) => {
     return (
@@ -431,39 +386,31 @@ const UsedInventory = () => {
     );
   };
 
-  // =========================================================
-  // RENDER
-  // =========================================================
+  const logout = async () => {
+    try {
+      await axios.post(
+        "/api/auth/logout",
+        {},
+        {
+          withCredentials: true,
+        },
+      );
+
+      navigate("/");
+    } catch (error) {
+      console.error("Logout error:", error);
+    }
+  };
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#f8f9fb]">
       <Sidebar />
 
       <div className="min-h-screen md:ml-64">
-        <Navbar
-          onLogout={async () => {
-            try {
-              await axios.post(
-                "/api/auth/logout",
-                {},
-                {
-                  withCredentials: true,
-                },
-              );
-
-              navigate("/");
-            } catch (error) {
-              console.error("Logout error:", error);
-            }
-          }}
-        />
+        <Navbar onLogout={logout} />
 
         <main className="pt-20">
           <div className="space-y-6 p-4 sm:p-6 lg:p-8">
-            {/* =================================================
-                PAGE HEADER
-            ================================================== */}
-
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <h1 className="text-2xl font-semibold tracking-tight text-[#172033]">
@@ -471,7 +418,7 @@ const UsedInventory = () => {
                 </h1>
 
                 <p className="mt-1 text-sm text-gray-500">
-                  Record the clothes used or sold today.
+                  Record the clothes used or sold.
                 </p>
               </div>
 
@@ -493,16 +440,12 @@ const UsedInventory = () => {
               </div>
             </div>
 
-            {/* =================================================
-                SUMMARY
-            ================================================== */}
-
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <p className="text-sm font-medium text-gray-500">
-                      Clothes Used Today
+                      Clothes Used
                     </p>
 
                     <h2 className="mt-2 text-3xl font-semibold text-[#172033]">
@@ -532,7 +475,7 @@ const UsedInventory = () => {
                     </h2>
 
                     <p className="mt-1 text-xs text-gray-400">
-                      Products selected for today
+                      Products selected
                     </p>
                   </div>
 
@@ -542,10 +485,6 @@ const UsedInventory = () => {
                 </div>
               </div>
             </div>
-
-            {/* =================================================
-                TODAY'S USAGE
-            ================================================== */}
 
             <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
               <div className="flex flex-col gap-4 border-b border-gray-100 px-5 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
@@ -577,10 +516,6 @@ const UsedInventory = () => {
                 </button>
               </div>
 
-              {/* =================================================
-                  LOADING
-              ================================================== */}
-
               {loadingUsage ? (
                 <div className="px-5 py-14 text-center sm:px-6">
                   <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-gray-200 border-t-[#d9a441]" />
@@ -598,7 +533,7 @@ const UsedInventory = () => {
                   </h3>
 
                   <p className="mx-auto mt-1 max-w-sm text-xs text-gray-400">
-                    Click "Add Product" to select clothes from your inventory.
+                    Click Add Product to select clothes from your inventory.
                   </p>
 
                   <button
@@ -615,12 +550,8 @@ const UsedInventory = () => {
                 </div>
               ) : (
                 <>
-                  {/* =================================================
-                      DESKTOP
-                  ================================================== */}
-
                   <div className="hidden overflow-x-auto md:block">
-                    <table className="w-full min-w-[750px]">
+                    <table className="w-full min-w-[850px]">
                       <thead>
                         <tr className="border-b border-gray-100 bg-gray-50/70">
                           <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-400">
@@ -643,15 +574,11 @@ const UsedInventory = () => {
 
                       <tbody className="divide-y divide-gray-100">
                         {todayProducts.map((item) => {
-                          const isSaved = savedProducts.some(
-                            (saved) => saved.id === item.id,
-                          );
-
+                          const isSaved = Boolean(item.usageItemId);
                           const isSaving = savingProductId === item.id;
-
                           return (
                             <tr
-                              key={item.id}
+                              key={`${item.id}-${item.usageItemId || "new"}`}
                               className="transition hover:bg-gray-50/70"
                             >
                               <td className="px-6 py-5">
@@ -716,32 +643,37 @@ const UsedInventory = () => {
 
                               <td className="px-6 py-5 text-right">
                                 <div className="flex items-center justify-end gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => removeProduct(item.id)}
-                                    disabled={isSaved || isSaving}
-                                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
-                                  >
-                                    <X size={14} />
-                                    Remove
-                                  </button>
+                                  {!isSaved ? (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => removeProduct(item.id)}
+                                        disabled={isSaving}
+                                        className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+                                      >
+                                        <X size={14} />
+                                        Remove
+                                      </button>
 
-                                  <button
-                                    type="button"
-                                    onClick={() => saveProduct(item.id)}
-                                    disabled={
-                                      item.usedQty === 0 || isSaved || isSaving
-                                    }
-                                    className="inline-flex items-center gap-1.5 rounded-lg bg-[#172033] px-3 py-2 text-xs font-medium text-white transition hover:bg-[#222d42] disabled:cursor-not-allowed disabled:opacity-30"
-                                  >
-                                    <Save size={14} />
+                                      <button
+                                        type="button"
+                                        onClick={() => saveProduct(item.id)}
+                                        disabled={
+                                          item.usedQty === 0 || isSaving
+                                        }
+                                        className="inline-flex items-center gap-1.5 rounded-lg bg-[#172033] px-3 py-2 text-xs font-medium text-white transition hover:bg-[#222d42] disabled:cursor-not-allowed disabled:opacity-30"
+                                      >
+                                        <Save size={14} />
 
-                                    {isSaving
-                                      ? "Saving..."
-                                      : isSaved
-                                        ? "Saved"
-                                        : "Save"}
-                                  </button>
+                                        {isSaving ? "Saving..." : "Save"}
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-3 py-2 text-xs font-medium text-green-600">
+                                      <CheckCircle2 size={14} />
+                                      Saved
+                                    </span>
+                                  )}
                                 </div>
                               </td>
                             </tr>
@@ -751,21 +683,13 @@ const UsedInventory = () => {
                     </table>
                   </div>
 
-                  {/* =================================================
-                      MOBILE
-                  ================================================== */}
-
                   <div className="space-y-3 p-4 md:hidden">
                     {todayProducts.map((item) => {
-                      const isSaved = savedProducts.some(
-                        (saved) => saved.id === item.id,
-                      );
-
+                      const isSaved = Boolean(item.usageItemId);
                       const isSaving = savingProductId === item.id;
-
                       return (
                         <div
-                          key={item.id}
+                          key={`${item.id}-${item.usageItemId || "new"}`}
                           className="rounded-xl border border-gray-100 bg-gray-50/60 p-4"
                         >
                           <div className="flex items-start justify-between gap-3">
@@ -830,44 +754,45 @@ const UsedInventory = () => {
                           </div>
 
                           <div className="mt-3 flex gap-2">
-                            <button
-                              type="button"
-                              onClick={() => removeProduct(item.id)}
-                              disabled={isSaved || isSaving}
-                              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-xs font-medium text-gray-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
-                            >
-                              <X size={14} />
-                              Remove
-                            </button>
+                            {!isSaved ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => removeProduct(item.id)}
+                                  disabled={isSaving}
+                                  className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-xs font-medium text-gray-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+                                >
+                                  <X size={14} />
+                                  Remove
+                                </button>
 
-                            <button
-                              type="button"
-                              onClick={() => saveProduct(item.id)}
-                              disabled={
-                                item.usedQty === 0 || isSaved || isSaving
-                              }
-                              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-[#172033] px-3 py-2.5 text-xs font-medium text-white transition hover:bg-[#222d42] disabled:cursor-not-allowed disabled:opacity-30"
-                            >
-                              <Save size={14} />
+                                <button
+                                  type="button"
+                                  onClick={() => saveProduct(item.id)}
+                                  disabled={item.usedQty === 0 || isSaving}
+                                  className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-[#172033] px-3 py-2.5 text-xs font-medium text-white transition hover:bg-[#222d42] disabled:cursor-not-allowed disabled:opacity-30"
+                                >
+                                  <Save size={14} />
 
-                              {isSaving
-                                ? "Saving..."
-                                : isSaved
-                                  ? "Saved"
-                                  : "Save"}
-                            </button>
+                                  {isSaving ? "Saving..." : "Save"}
+                                </button>
+                              </>
+                            ) : (
+                              <div className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-green-50 px-3 py-2.5 text-xs font-medium text-green-600">
+                                <CheckCircle2 size={14} />
+                                Saved
+                              </div>
+                            )}
                           </div>
                         </div>
                       );
                     })}
                   </div>
 
-                  {/* TOTAL */}
-
                   <div className="border-t border-gray-100 px-5 py-4 sm:px-6">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium text-gray-500">
-                        Total Saved Today
+                        Total Saved
                       </span>
 
                       <span className="text-lg font-semibold text-[#172033]">
@@ -878,10 +803,6 @@ const UsedInventory = () => {
                 </>
               )}
             </div>
-
-            {/* =================================================
-                LAST 10 DAYS HISTORY
-            ================================================== */}
 
             <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
               <div className="flex items-center gap-3 border-b border-gray-100 px-5 py-5 sm:px-6">
@@ -916,124 +837,169 @@ const UsedInventory = () => {
                 </div>
               ) : (
                 <div className="divide-y divide-gray-100">
-                  {Array.isArray(history) &&
-                    history.slice(0, 10).map((day) => {
-                      const isExpanded = expandedHistory === day.id;
+                  {history.slice(0, 10).map((day) => {
+                    const isExpanded = expandedHistory === day.id;
 
-                      const products = Array.isArray(day.items)
-                        ? day.items
-                        : [];
+                    const products = getHistoryProducts(day);
 
-                      const totalUsed = Number(
-                        day.total_items ??
-                          products.reduce(
-                            (sum, product) =>
-                              sum + Number(product.quantity || 0),
-                            0,
-                          ),
-                      );
+                    const totalUsed = Number(
+                      day.total_items ??
+                        products.reduce(
+                          (sum, product) => sum + Number(product.quantity || 0),
+                          0,
+                        ),
+                    );
 
-                      return (
-                        <div key={day.id}>
-                          <button
-                            type="button"
-                            onClick={() => toggleHistory(day.id)}
-                            className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left transition hover:bg-gray-50 sm:px-6"
-                          >
-                            <div className="flex min-w-0 items-center gap-3">
-                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-500">
-                                <CalendarDays size={16} />
-                              </div>
-
-                              <div className="min-w-0">
-                                <p className="text-sm font-medium text-[#172033]">
-                                  {formatDate(day.usage_date || day.date)}
-                                </p>
-                                <p className="text-xs text-gray-400">
-                                  {products.length} products used
-                                </p>
-                              </div>
+                    return (
+                      <div key={day.id}>
+                        <button
+                          type="button"
+                          onClick={() => toggleHistory(day.id)}
+                          className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left transition hover:bg-gray-50 sm:px-6"
+                        >
+                          <div className="flex min-w-0 items-center gap-3">
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-500">
+                              <CalendarDays size={16} />
                             </div>
 
-                            <div className="flex shrink-0 items-center gap-3">
-                              <span className="rounded-full bg-[#f1e6c9] px-3 py-1 text-xs font-medium text-[#8f681d]">
-                                {totalUsed} used
-                              </span>
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-[#172033]">
+                                {formatDate(day.usage_date || day.date)}
+                              </p>
 
-                              {isExpanded ? (
-                                <ChevronUp
-                                  size={18}
-                                  className="text-gray-400"
-                                />
-                              ) : (
-                                <ChevronDown
-                                  size={18}
-                                  className="text-gray-400"
-                                />
-                              )}
+                              <p className="text-xs text-gray-400">
+                                {products.length} products used
+                              </p>
                             </div>
-                          </button>
+                          </div>
 
-                          {isExpanded && (
-                            <div className="border-t border-gray-100 bg-gray-50/60 px-5 py-4 sm:px-6">
-                              <div className="mb-3 flex items-center gap-2">
-                                <ShoppingBag
-                                  size={15}
-                                  className="text-[#8f681d]"
-                                />
+                          <div className="flex shrink-0 items-center gap-3">
+                            <span className="rounded-full bg-[#f1e6c9] px-3 py-1 text-xs font-medium text-[#8f681d]">
+                              {totalUsed} used
+                            </span>
 
-                                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                  Selling Details
-                                </p>
-                              </div>
+                            {isExpanded ? (
+                              <ChevronUp size={18} className="text-gray-400" />
+                            ) : (
+                              <ChevronDown
+                                size={18}
+                                className="text-gray-400"
+                              />
+                            )}
+                          </div>
+                        </button>
 
-                              <div className="space-y-2">
-                                {products.map((product) => (
+                        {isExpanded && (
+                          <div className="border-t border-gray-100 bg-gray-50/60 px-5 py-4 sm:px-6">
+                            <div className="mb-3 flex items-center gap-2">
+                              <ShoppingBag
+                                size={15}
+                                className="text-[#8f681d]"
+                              />
+
+                              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                Selling Details
+                              </p>
+                            </div>
+
+                            <div className="space-y-2">
+                              {products.map((product) => {
+                                const usageItemId = Number(
+                                  product.id || product.usage_item_id,
+                                );
+                                const quantity = Number(product.quantity || 0);
+                                const createdAt =
+                                  product.created_at ||
+                                  product.createdAt ||
+                                  null;
+                                const createdDate = createdAt
+                                  ? new Date(createdAt)
+                                  : null;
+                                const age = createdDate
+                                  ? Date.now() - createdDate.getTime()
+                                  : NaN;
+                                const threeDays = 10 * 24 * 60 * 60 * 1000;
+                                const canRevert =
+                                  createdDate &&
+                                  !Number.isNaN(createdDate.getTime()) &&
+                                  age >= 0 &&
+                                  age <= threeDays;
+                                const isReverting =
+                                  revertingProductId === usageItemId;
+
+                                return (
                                   <div
-                                    key={product.id || product.inventory_id}
-                                    className="flex items-center justify-between gap-3 rounded-lg bg-white px-4 py-3"
+                                    key={usageItemId || product.inventory_id}
+                                    className="flex flex-col gap-3 rounded-lg bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
                                   >
                                     <div className="flex min-w-0 items-center gap-3">
                                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#f1e6c9] text-[#8f681d]">
                                         <Package size={15} />
                                       </div>
 
-                                      <span className="truncate text-sm font-medium text-gray-600">
-                                        {getHistoryProductName(product)}
-                                      </span>
+                                      <div className="min-w-0">
+                                        <p className="truncate text-sm font-medium text-gray-600">
+                                          {getHistoryProductName(product)}
+                                        </p>
+
+                                        <p className="text-xs text-gray-400">
+                                          {quantity} used
+                                        </p>
+                                      </div>
                                     </div>
 
-                                    <span className="shrink-0 rounded-full bg-green-50 px-3 py-1 text-xs font-semibold text-green-600">
-                                      {Number(product.quantity || 0)} sold
-                                    </span>
+                                    <div className="flex items-center justify-between gap-3 sm:justify-end">
+                                      <span className="shrink-0 rounded-full bg-green-50 px-3 py-1 text-xs font-semibold text-green-600">
+                                        {quantity} used
+                                      </span>
+
+                                      {canRevert && (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            revertHistoryProduct(product)
+                                          }
+                                          disabled={isReverting}
+                                          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-medium text-orange-600 transition hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                        >
+                                          <RotateCcw
+                                            size={14}
+                                            className={
+                                              isReverting ? "animate-spin" : ""
+                                            }
+                                          />
+
+                                          {isReverting
+                                            ? "Reverting..."
+                                            : "Revert"}
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
-                                ))}
-                              </div>
-
-                              <div className="mt-3 flex items-center justify-between border-t border-gray-200 pt-3">
-                                <span className="text-xs font-medium text-gray-500">
-                                  Total clothes used
-                                </span>
-
-                                <span className="text-sm font-semibold text-[#172033]">
-                                  {totalUsed}
-                                </span>
-                              </div>
+                                );
+                              })}
                             </div>
-                          )}
-                        </div>
-                      );
-                    })}
+
+                            <div className="mt-3 flex items-center justify-between border-t border-gray-200 pt-3">
+                              <span className="text-xs font-medium text-gray-500">
+                                Total clothes used
+                              </span>
+
+                              <span className="text-sm font-semibold text-[#172033]">
+                                {totalUsed}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
           </div>
         </main>
       </div>
-
-      {/* =====================================================
-          ADD PRODUCT MODAL
-      ====================================================== */}
 
       {showProductModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
