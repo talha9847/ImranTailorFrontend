@@ -10,6 +10,7 @@ import {
   HistoryIcon,
   PackageCheck,
   Shirt,
+  UserRound,
 } from "lucide-react";
 
 const Sidebar = ({ isOpen, onClose }) => {
@@ -33,6 +34,12 @@ const Sidebar = ({ isOpen, onClose }) => {
       name: "Clothes",
       path: "/clothes",
       icon: Shirt,
+    },
+
+    {
+      name: "Customers",
+      path: "/customers",
+      icon: UserRound,
     },
     {
       name: "History",

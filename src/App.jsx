@@ -13,6 +13,8 @@ import NotFound from "./components/NotFound";
 import { AuthProvider } from "./context/authContext";
 import ProtectedRoute from "./context/protectedRoute";
 import History from "./components/History";
+import Customer from "./components/Customer";
+import ViewOrder from "./components/ViewOrder";
 
 function App() {
   return (
@@ -26,6 +28,8 @@ function App() {
             <Route path="/inventory" element={<Inventory />} />
             <Route path="/clothes" element={<Clothes />} />
             <Route path="/history" element={<History />} />
+            <Route path="/customers" element={<Customer />} />
+            <Route path="/view-order/:id" element={<ViewOrder />} />
           </Route>
           <Route path="/*" element={<NotFound />} />
         </Routes>
