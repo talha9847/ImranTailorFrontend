@@ -42,6 +42,7 @@ const UsedInventory = () => {
 
   const [savingProductId, setSavingProductId] = useState(null);
   const [revertingProductId, setRevertingProductId] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const fetchInventoryProducts = async () => {
     try {
@@ -364,7 +365,12 @@ const UsedInventory = () => {
       year: "numeric",
     });
   };
-
+  const formatCurrency = (amount) => {
+    return `₹${Number(amount || 0).toLocaleString("en-IN", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  };
   const getHistoryProducts = (day) => {
     if (Array.isArray(day.items)) {
       return day.items;
@@ -404,11 +410,9 @@ const UsedInventory = () => {
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#f8f9fb]">
-      <Sidebar />
-
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="min-h-screen md:ml-64">
-        <Navbar onLogout={logout} />
-
+        <Navbar onMenuClick={() => setSidebarOpen(true)} onLogout={logout} />
         <main className="pt-20">
           <div className="space-y-6 p-4 sm:p-6 lg:p-8">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -850,144 +854,317 @@ const UsedInventory = () => {
                         ),
                     );
 
+                    const totalSellingAmount = products.reduce(
+                      (sum, product) =>
+                        sum +
+                        Number(product.quantity || 0) *
+                          Number(
+                            product.selling_price ?? product.sellingPrice ?? 0,
+                          ),
+                      0,
+                    );
+
                     return (
                       <div key={day.id}>
+                        {/* History Header */}
                         <button
                           type="button"
                           onClick={() => toggleHistory(day.id)}
-                          className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left transition hover:bg-gray-50 sm:px-6"
+                          className="
+            group
+            w-full
+            px-5 py-4
+            sm:px-6 sm:py-5
+            text-left
+            transition
+            hover:bg-[#faf9f6]
+          "
                         >
-                          <div className="flex min-w-0 items-center gap-3">
-                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-500">
-                              <CalendarDays size={16} />
+                          <div className="flex items-center justify-between gap-4">
+                            {/* Left */}
+                            <div className="flex min-w-0 items-center gap-3.5">
+                              <div
+                                className="
+                  flex h-10 w-10 shrink-0
+                  items-center justify-center
+                  rounded-xl
+                  bg-[#f6f4ef]
+                  text-[#8f681d]
+                  ring-1 ring-[#e8dfc9]
+                "
+                              >
+                                <CalendarDays size={17} strokeWidth={1.8} />
+                              </div>
+
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold text-[#172033]">
+                                  {formatDate(day.usage_date || day.date)}
+                                </p>
+
+                                <p className="mt-1 text-xs text-gray-400">
+                                  {products.length}{" "}
+                                  {products.length === 1
+                                    ? "product"
+                                    : "products"}{" "}
+                                  used
+                                </p>
+                              </div>
                             </div>
 
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium text-[#172033]">
-                                {formatDate(day.usage_date || day.date)}
-                              </p>
+                            {/* Right summary */}
+                            <div className="flex shrink-0 items-center gap-4 sm:gap-6">
+                              {/* Quantity */}
+                              <div className="hidden text-right sm:block">
+                                <p className="text-[10px] font-medium uppercase tracking-wider text-gray-400">
+                                  Quantity
+                                </p>
 
-                              <p className="text-xs text-gray-400">
-                                {products.length} products used
-                              </p>
+                                <p className="mt-1 text-sm font-semibold text-[#172033]">
+                                  {totalUsed}
+                                </p>
+                              </div>
+
+                              {/* Amount */}
+                              <div className="text-right">
+                                <p className="text-[10px] font-medium uppercase tracking-wider text-gray-400">
+                                  Total
+                                </p>
+
+                                <p className="mt-1 text-sm font-semibold text-[#8f681d]">
+                                  {formatCurrency(totalSellingAmount)}
+                                </p>
+                              </div>
+
+                              {/* Expand icon */}
+                              <div
+                                className="
+                  flex h-8 w-8 shrink-0
+                  items-center justify-center
+                  rounded-lg
+                  text-gray-400
+                  transition
+                  group-hover:bg-gray-100
+                "
+                              >
+                                {isExpanded ? (
+                                  <ChevronUp size={17} strokeWidth={1.8} />
+                                ) : (
+                                  <ChevronDown size={17} strokeWidth={1.8} />
+                                )}
+                              </div>
                             </div>
                           </div>
 
-                          <div className="flex shrink-0 items-center gap-3">
-                            <span className="rounded-full bg-[#f1e6c9] px-3 py-1 text-xs font-medium text-[#8f681d]">
+                          {/* Mobile quantity */}
+                          <div className="mt-3 flex items-center gap-2 sm:hidden">
+                            <span className="rounded-full bg-[#f1e6c9] px-2.5 py-1 text-[11px] font-medium text-[#8f681d]">
                               {totalUsed} used
                             </span>
 
-                            {isExpanded ? (
-                              <ChevronUp size={18} className="text-gray-400" />
-                            ) : (
-                              <ChevronDown
-                                size={18}
-                                className="text-gray-400"
-                              />
-                            )}
+                            <span className="text-xs text-gray-400">·</span>
+
+                            <span className="text-xs text-gray-400">
+                              {formatCurrency(totalSellingAmount)}
+                            </span>
                           </div>
                         </button>
 
+                        {/* Expanded Details */}
                         {isExpanded && (
-                          <div className="border-t border-gray-100 bg-gray-50/60 px-5 py-4 sm:px-6">
-                            <div className="mb-3 flex items-center gap-2">
-                              <ShoppingBag
-                                size={15}
-                                className="text-[#8f681d]"
-                              />
+                          <div className="border-t border-gray-100 bg-[#faf9f6] px-5 py-5 sm:px-6">
+                            {/* Section Header */}
+                            <div className="mb-4 flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#f1e6c9] text-[#8f681d]">
+                                  <ShoppingBag size={14} strokeWidth={1.8} />
+                                </div>
 
-                              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                Selling Details
-                              </p>
+                                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-gray-500">
+                                  Selling Details
+                                </p>
+                              </div>
+
+                              <span className="text-xs text-gray-400">
+                                {products.length}{" "}
+                                {products.length === 1 ? "item" : "items"}
+                              </span>
                             </div>
 
-                            <div className="space-y-2">
+                            {/* Products */}
+                            <div className="space-y-2.5">
                               {products.map((product) => {
                                 const usageItemId = Number(
                                   product.id || product.usage_item_id,
                                 );
+
                                 const quantity = Number(product.quantity || 0);
+
+                                const sellingPrice = Number(
+                                  product.selling_price ??
+                                    product.sellingPrice ??
+                                    0,
+                                );
+
+                                const totalAmount = quantity * sellingPrice;
+
                                 const createdAt =
                                   product.created_at ||
                                   product.createdAt ||
                                   null;
+
                                 const createdDate = createdAt
                                   ? new Date(createdAt)
                                   : null;
+
                                 const age = createdDate
                                   ? Date.now() - createdDate.getTime()
                                   : NaN;
-                                const threeDays = 10 * 24 * 60 * 60 * 1000;
+
+                                const tenDays = 10 * 24 * 60 * 60 * 1000;
+
                                 const canRevert =
                                   createdDate &&
                                   !Number.isNaN(createdDate.getTime()) &&
                                   age >= 0 &&
-                                  age <= threeDays;
+                                  age <= tenDays;
+
                                 const isReverting =
                                   revertingProductId === usageItemId;
 
                                 return (
                                   <div
                                     key={usageItemId || product.inventory_id}
-                                    className="flex flex-col gap-3 rounded-lg bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                                    className="
+                      rounded-xl
+                      border border-gray-100
+                      bg-white
+                      px-4 py-3.5
+                      shadow-[0_2px_8px_rgba(23,32,51,0.03)]
+                    "
                                   >
-                                    <div className="flex min-w-0 items-center gap-3">
-                                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#f1e6c9] text-[#8f681d]">
-                                        <Package size={15} />
-                                      </div>
-
-                                      <div className="min-w-0">
-                                        <p className="truncate text-sm font-medium text-gray-600">
-                                          {getHistoryProductName(product)}
-                                        </p>
-
-                                        <p className="text-xs text-gray-400">
-                                          {quantity} used
-                                        </p>
-                                      </div>
-                                    </div>
-
-                                    <div className="flex items-center justify-between gap-3 sm:justify-end">
-                                      <span className="shrink-0 rounded-full bg-green-50 px-3 py-1 text-xs font-semibold text-green-600">
-                                        {quantity} used
-                                      </span>
-
-                                      {canRevert && (
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            revertHistoryProduct(product)
-                                          }
-                                          disabled={isReverting}
-                                          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-medium text-orange-600 transition hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                                      {/* Product */}
+                                      <div className="flex min-w-0 items-center gap-3">
+                                        <div
+                                          className="
+                            flex h-9 w-9 shrink-0
+                            items-center justify-center
+                            rounded-lg
+                            bg-[#f6f4ef]
+                            text-[#8f681d]
+                          "
                                         >
-                                          <RotateCcw
-                                            size={14}
-                                            className={
-                                              isReverting ? "animate-spin" : ""
-                                            }
+                                          <Package
+                                            size={15}
+                                            strokeWidth={1.8}
                                           />
+                                        </div>
 
-                                          {isReverting
-                                            ? "Reverting..."
-                                            : "Revert"}
-                                        </button>
-                                      )}
+                                        <div className="min-w-0">
+                                          <p className="truncate text-sm font-medium text-[#172033]">
+                                            {getHistoryProductName(product)}
+                                          </p>
+
+                                          <p className="mt-0.5 text-xs text-gray-400">
+                                            {formatCurrency(sellingPrice)} per
+                                            item
+                                          </p>
+                                        </div>
+                                      </div>
+
+                                      {/* Metrics + Action */}
+                                      <div className="flex items-center justify-between gap-4 sm:justify-end sm:gap-5">
+                                        {/* Quantity */}
+                                        <div className="text-right">
+                                          <p className="text-[10px] font-medium uppercase tracking-wider text-gray-400">
+                                            Qty
+                                          </p>
+
+                                          <p className="mt-0.5 text-sm font-semibold text-[#172033]">
+                                            {quantity}
+                                          </p>
+                                        </div>
+
+                                        {/* Divider */}
+                                        <div className="h-8 w-px bg-gray-200" />
+
+                                        {/* Amount */}
+                                        <div className="text-right">
+                                          <p className="text-[10px] font-medium uppercase tracking-wider text-gray-400">
+                                            Amount
+                                          </p>
+
+                                          <p className="mt-0.5 text-sm font-semibold text-[#8f681d]">
+                                            {formatCurrency(totalAmount)}
+                                          </p>
+                                        </div>
+
+                                        {/* Revert */}
+                                        {canRevert && (
+                                          <>
+                                            <div className="hidden h-8 w-px bg-gray-200 sm:block" />
+
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                revertHistoryProduct(product)
+                                              }
+                                              disabled={isReverting}
+                                              title="Revert this usage"
+                                              className="
+                                flex h-9 w-9 shrink-0
+                                items-center justify-center
+                                rounded-lg
+                                border border-orange-200
+                                bg-orange-50
+                                text-orange-600
+                                transition
+                                hover:border-orange-300
+                                hover:bg-orange-100
+                                disabled:cursor-not-allowed
+                                disabled:opacity-40
+                              "
+                                            >
+                                              <RotateCcw
+                                                size={14}
+                                                strokeWidth={1.8}
+                                                className={
+                                                  isReverting
+                                                    ? "animate-spin"
+                                                    : ""
+                                                }
+                                              />
+                                            </button>
+                                          </>
+                                        )}
+                                      </div>
                                     </div>
                                   </div>
                                 );
                               })}
                             </div>
 
-                            <div className="mt-3 flex items-center justify-between border-t border-gray-200 pt-3">
-                              <span className="text-xs font-medium text-gray-500">
-                                Total clothes used
-                              </span>
+                            {/* Footer Summary */}
+                            <div className="mt-4 flex items-center justify-between border-t border-gray-200 pt-4">
+                              <div>
+                                <p className="text-[10px] font-medium uppercase tracking-wider text-gray-400">
+                                  Daily Summary
+                                </p>
 
-                              <span className="text-sm font-semibold text-[#172033]">
-                                {totalUsed}
-                              </span>
+                                <p className="mt-1 text-xs text-gray-500">
+                                  Total clothes used
+                                </p>
+                              </div>
+
+                              <div className="text-right">
+                                <p className="text-base font-semibold text-[#172033]">
+                                  {totalUsed}
+                                </p>
+
+                                <p className="mt-0.5 text-xs font-medium text-[#8f681d]">
+                                  {formatCurrency(totalSellingAmount)}
+                                </p>
+                              </div>
                             </div>
                           </div>
                         )}
