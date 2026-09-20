@@ -9,17 +9,25 @@ import Dashboard from "./components/Dashboard";
 import Inventory from "./components/Inventory";
 import UsedInventory from "./components/UsedInventory";
 import Clothes from "./components/Clothes";
+import NotFound from "./components/NotFound";
+import { AuthProvider } from "./context/authContext";
+import ProtectedRoute from "./context/protectedRoute";
 
 function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Login />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/used-inventory" element={<UsedInventory />} />
-        <Route path="/inventory" element={<Inventory />} />
-        <Route path="/clothes" element={<Clothes />} />
-      </Routes>
+      <AuthProvider>
+        <Routes>
+          <Route path="/" element={<Login />} />
+          <Route element={<ProtectedRoute />}>
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/used-inventory" element={<UsedInventory />} />
+            <Route path="/inventory" element={<Inventory />} />
+            <Route path="/clothes" element={<Clothes />} />
+          </Route>
+          <Route path="/*" element={<NotFound />} />
+        </Routes>
+      </AuthProvider>
     </BrowserRouter>
   );
 }
