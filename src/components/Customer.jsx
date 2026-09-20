@@ -10,6 +10,7 @@ import {
   UserRound,
   Phone,
   ShoppingBag,
+  X,
 } from "lucide-react";
 
 import Navbar from "../components/Navbar";
@@ -63,7 +64,6 @@ const Customer = () => {
   // =========================================================
 
   const handleLogout = () => {
-    // Keep your existing logout logic here.
     navigate("/login");
   };
 
@@ -184,16 +184,13 @@ const Customer = () => {
   // =========================================================
 
   const toggleCustomer = async (customerId) => {
-    // Close if already open
     if (expandedCustomer === customerId) {
       setExpandedCustomer(null);
       return;
     }
 
-    // Open customer
     setExpandedCustomer(customerId);
 
-    // Don't fetch again if already loaded
     if (Object.prototype.hasOwnProperty.call(customerOrders, customerId)) {
       return;
     }
@@ -249,33 +246,63 @@ const Customer = () => {
                 HEADER
             ================================================= */}
 
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">
-                Customers
-              </h1>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-900 text-white shadow-sm">
+                    <UserRound size={18} />
+                  </div>
 
-              <p className="mt-1 text-sm text-gray-500">
-                View customers and their orders
-              </p>
+                  <h1 className="text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">
+                    Customers
+                  </h1>
+                </div>
+
+                <p className="mt-2 text-sm text-gray-500">
+                  View customers and manage their orders
+                </p>
+              </div>
+
+              {!loading && customers.length > 0 && (
+                <div className="inline-flex w-fit items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-600 shadow-sm">
+                  <UserRound size={15} className="text-gray-400" />
+
+                  <span>
+                    {customers.length}{" "}
+                    {customers.length === 1 ? "customer" : "customers"}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* =================================================
                 SEARCH
             ================================================= */}
 
-            <div className="relative max-w-md">
+            <div className="relative max-w-xl">
               <Search
                 size={18}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
               />
 
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search customer name or contact..."
-                className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-4 text-sm outline-none transition focus:border-gray-400 focus:ring-2 focus:ring-gray-100"
+                placeholder="Search by customer name or contact..."
+                className="w-full rounded-xl border border-gray-200 bg-white py-3.5 pl-11 pr-11 text-sm text-gray-900 shadow-sm outline-none transition placeholder:text-gray-400 hover:border-gray-300 focus:border-gray-400 focus:ring-4 focus:ring-gray-100"
               />
+
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch("")}
+                  className="absolute right-3 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-gray-400 transition hover:bg-gray-100 hover:text-gray-700"
+                  aria-label="Clear search"
+                >
+                  <X size={16} />
+                </button>
+              )}
             </div>
 
             {/* =================================================
@@ -283,7 +310,7 @@ const Customer = () => {
             ================================================= */}
 
             {error && (
-              <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-600">
+              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3.5 text-sm text-red-600">
                 {error}
               </div>
             )}
@@ -293,28 +320,45 @@ const Customer = () => {
             ================================================= */}
 
             {loading ? (
-              <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center">
-                <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-gray-700" />
+              <div className="rounded-2xl border border-gray-200 bg-white p-12 text-center shadow-sm">
+                <div className="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-gray-200 border-t-gray-800" />
 
-                <p className="mt-3 text-sm text-gray-500">
+                <p className="mt-4 text-sm font-medium text-gray-600">
                   Loading customers...
                 </p>
+
+                <p className="mt-1 text-xs text-gray-400">Please wait</p>
               </div>
             ) : customers.length === 0 ? (
               /* ===============================================
                  EMPTY
               =============================================== */
 
-              <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center">
-                <UserRound size={40} className="mx-auto text-gray-300" />
+              <div className="rounded-2xl border border-gray-200 bg-white p-12 text-center shadow-sm">
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-100 text-gray-400">
+                  <UserRound size={26} />
+                </div>
 
-                <p className="mt-3 font-medium text-gray-700">
+                <p className="mt-4 font-semibold text-gray-700">
                   No customers found
                 </p>
 
                 <p className="mt-1 text-sm text-gray-400">
-                  Try a different search
+                  {search
+                    ? "Try a different name or contact number."
+                    : "Customers will appear here once they are added."}
                 </p>
+
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch("")}
+                    className="mt-5 inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-800 active:scale-[0.98]"
+                  >
+                    <X size={15} />
+                    Clear Search
+                  </button>
+                )}
               </div>
             ) : (
               /* ===============================================
@@ -326,9 +370,11 @@ const Customer = () => {
                     DESKTOP HEADER
                 ============================================= */}
 
-                <div className="hidden grid-cols-[1fr_220px_100px] border-b border-gray-200 bg-gray-50 px-5 py-4 text-xs font-semibold uppercase tracking-wide text-gray-500 md:grid">
+                <div className="hidden grid-cols-[1fr_220px_150px] border-b border-gray-200 bg-gray-50/80 px-5 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400 md:grid">
                   <div>Customer</div>
+
                   <div>Contact</div>
+
                   <div className="text-center">Orders</div>
                 </div>
 
@@ -349,19 +395,27 @@ const Customer = () => {
                     return (
                       <div key={customer.id}>
                         {/* =================================
-                              CUSTOMER ROW
-                          ================================= */}
+                            CUSTOMER ROW
+                        ================================= */}
 
                         <button
                           type="button"
                           onClick={() => toggleCustomer(customer.id)}
-                          className="w-full text-left transition hover:bg-gray-50"
+                          className={`group w-full text-left transition ${
+                            isExpanded ? "bg-gray-50" : "hover:bg-gray-50"
+                          }`}
                         >
-                          <div className="grid grid-cols-1 gap-3 px-4 py-4 md:grid-cols-[1fr_220px_100px] md:items-center md:px-5">
+                          <div className="grid grid-cols-1 gap-4 px-4 py-4 sm:px-5 md:grid-cols-[1fr_220px_150px] md:items-center">
                             {/* CUSTOMER */}
 
-                            <div className="flex items-center gap-3">
-                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-600">
+                            <div className="flex min-w-0 items-center gap-3">
+                              <div
+                                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition ${
+                                  isExpanded
+                                    ? "bg-gray-900 text-white"
+                                    : "bg-gray-100 text-gray-500 group-hover:bg-gray-200"
+                                }`}
+                              >
                                 <UserRound size={19} />
                               </div>
 
@@ -370,7 +424,7 @@ const Customer = () => {
                                   {customer.customer_name}
                                 </p>
 
-                                <p className="text-xs text-gray-400">
+                                <p className="mt-0.5 text-xs text-gray-400">
                                   Customer ID: {customer.id}
                                 </p>
                               </div>
@@ -379,64 +433,83 @@ const Customer = () => {
                             {/* CONTACT */}
 
                             <div className="flex items-center gap-2 text-sm text-gray-600">
-                              <Phone
-                                size={15}
-                                className="shrink-0 text-gray-400"
-                              />
+                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-400">
+                                <Phone size={14} />
+                              </div>
 
-                              <span>{customer.contact}</span>
+                              <span className="truncate">
+                                {customer.contact || "No contact"}
+                              </span>
                             </div>
 
                             {/* ORDERS */}
 
-                            <div className="flex items-center justify-between md:justify-center md:gap-3">
-                              <div className="flex items-center gap-2 text-sm text-gray-600">
-                                <ShoppingBag size={16} />
+                            <div className="flex items-center justify-between md:justify-end md:gap-3">
+                              <div className="flex items-center gap-2">
+                                <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600">
+                                  {isExpanded ? "Open" : "Orders"}
+                                </span>
 
-                                <span>
-                                  {isExpanded ? "Hide" : "View"} orders
+                                <span className="hidden text-sm text-gray-500 sm:inline">
+                                  {isExpanded ? "Hide" : "View"}
                                 </span>
                               </div>
 
-                              {isExpanded ? (
-                                <ChevronUp
-                                  size={19}
-                                  className="text-gray-500"
-                                />
-                              ) : (
-                                <ChevronDown
-                                  size={19}
-                                  className="text-gray-500"
-                                />
-                              )}
+                              <div
+                                className={`flex h-8 w-8 items-center justify-center rounded-lg transition ${
+                                  isExpanded
+                                    ? "bg-gray-200 text-gray-700"
+                                    : "bg-gray-100 text-gray-500 group-hover:bg-gray-200"
+                                }`}
+                              >
+                                {isExpanded ? (
+                                  <ChevronUp size={17} />
+                                ) : (
+                                  <ChevronDown size={17} />
+                                )}
+                              </div>
                             </div>
                           </div>
                         </button>
 
                         {/* =================================
-                              EXPANDED ORDERS
-                          ================================= */}
+                            EXPANDED ORDERS
+                        ================================= */}
 
                         {isExpanded && (
-                          <div className="border-t border-gray-100 bg-gray-50 px-4 py-4 sm:px-6">
-                            <div className="mb-3 flex items-center gap-2">
-                              <ShoppingBag
-                                size={17}
-                                className="text-gray-600"
-                              />
+                          <div className="border-t border-gray-100 bg-gray-50/70 px-4 py-5 sm:px-6">
+                            <div className="mb-4 flex items-center justify-between">
+                              <div className="flex items-center gap-2.5">
+                                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-gray-500 shadow-sm ring-1 ring-gray-200">
+                                  <ShoppingBag size={15} />
+                                </div>
 
-                              <h3 className="font-semibold text-gray-800">
-                                Orders
-                              </h3>
+                                <div>
+                                  <h3 className="text-sm font-semibold text-gray-800">
+                                    Customer Orders
+                                  </h3>
+
+                                  {!isOrdersLoading &&
+                                    !orderError &&
+                                    orders.length > 0 && (
+                                      <p className="text-xs text-gray-400">
+                                        {orders.length}{" "}
+                                        {orders.length === 1
+                                          ? "order"
+                                          : "orders"}
+                                      </p>
+                                    )}
+                                </div>
+                              </div>
                             </div>
 
                             {/* LOADING */}
 
                             {isOrdersLoading ? (
-                              <div className="rounded-xl border border-gray-200 bg-white p-6 text-center">
-                                <div className="mx-auto h-6 w-6 animate-spin rounded-full border-3 border-gray-200 border-t-gray-700" />
+                              <div className="rounded-xl border border-gray-200 bg-white p-7 text-center shadow-sm">
+                                <div className="mx-auto h-7 w-7 animate-spin rounded-full border-3 border-gray-200 border-t-gray-700" />
 
-                                <p className="mt-2 text-sm text-gray-500">
+                                <p className="mt-3 text-sm font-medium text-gray-600">
                                   Loading orders...
                                 </p>
                               </div>
@@ -449,34 +522,37 @@ const Customer = () => {
                             ) : orders.length === 0 ? (
                               /* NO ORDERS */
 
-                              <div className="rounded-xl border border-gray-200 bg-white p-6 text-center">
-                                <ShoppingBag
-                                  size={30}
-                                  className="mx-auto text-gray-300"
-                                />
+                              <div className="rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm">
+                                <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-gray-400">
+                                  <ShoppingBag size={21} />
+                                </div>
 
-                                <p className="mt-2 text-sm font-medium text-gray-600">
+                                <p className="mt-3 text-sm font-semibold text-gray-600">
                                   No orders found
+                                </p>
+
+                                <p className="mt-1 text-xs text-gray-400">
+                                  This customer doesn't have any orders yet.
                                 </p>
                               </div>
                             ) : (
                               /* ORDERS */
 
-                              <div className="space-y-2">
+                              <div className="space-y-2.5">
                                 {orders.map((order) => (
                                   <div
                                     key={order.id}
-                                    className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between"
+                                    className="group flex flex-col gap-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition hover:border-gray-300 hover:shadow-md sm:flex-row sm:items-center sm:justify-between"
                                   >
-                                    {/* ORDER ID */}
+                                    {/* ORDER INFO */}
 
-                                    <div className="flex items-center gap-3">
-                                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gray-100 text-gray-600">
+                                    <div className="flex min-w-0 items-center gap-3">
+                                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-500 transition group-hover:bg-gray-900 group-hover:text-white">
                                         <ShoppingBag size={17} />
                                       </div>
 
-                                      <div>
-                                        <p className="text-xs text-gray-400">
+                                      <div className="min-w-0">
+                                        <p className="text-[11px] font-medium uppercase tracking-wider text-gray-400">
                                           Order
                                         </p>
 
@@ -491,10 +567,11 @@ const Customer = () => {
                                     <button
                                       type="button"
                                       onClick={() => handleViewOrder(order.id)}
-                                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-800"
+                                      className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-gray-800 active:scale-[0.98] sm:w-auto"
                                     >
                                       <Eye size={16} />
-                                      View Order
+
+                                      <span>View Order</span>
                                     </button>
                                   </div>
                                 ))}

@@ -215,7 +215,35 @@ const History = () => {
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  const productSales = useMemo(() => {
+    const products = {};
 
+    history.forEach((day) => {
+      const items = Array.isArray(day.items) ? day.items : [];
+
+      items.forEach((item) => {
+        const clothName = item.inventory?.cloth_name || "Unknown Product";
+
+        const quantity = Number(item.quantity || 0);
+
+        const amount = Number(item.total_amount || 0);
+
+        if (!products[clothName]) {
+          products[clothName] = {
+            cloth_name: clothName,
+            quantity: 0,
+            amount: 0,
+          };
+        }
+
+        products[clothName].quantity += quantity;
+
+        products[clothName].amount += amount;
+      });
+    });
+
+    return Object.values(products).sort((a, b) => b.quantity - a.quantity);
+  }, [history]);
   // =======================================================
   // TOTALS
   // =======================================================
@@ -301,7 +329,6 @@ const History = () => {
             {/* =================================================
                 HEADER
             ================================================= */}
-
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <h1 className="text-2xl font-semibold tracking-tight text-[#172033] sm:text-3xl">
@@ -322,11 +349,9 @@ const History = () => {
                 </span>
               </div>
             </div>
-
             {/* =================================================
                 DATE FILTER
             ================================================= */}
-
             <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
                 {/* START DATE */}
@@ -376,11 +401,9 @@ const History = () => {
                 </button>
               </div>
             </div>
-
             {/* =================================================
                 ERROR
             ================================================= */}
-
             {error && (
               <div className="flex items-center justify-between rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
                 <span>{error}</span>
@@ -394,11 +417,9 @@ const History = () => {
                 </button>
               </div>
             )}
-
             {/* =================================================
                 SUMMARY
             ================================================= */}
-
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               {/* DAYS */}
 
@@ -459,12 +480,168 @@ const History = () => {
                   </div>
                 </div>
               </div>
-            </div>
+            </div>{" "}
+            {/* =================================================
+                PRODUCT SALES SUMMARY
+            ================================================= */}
+            {productSales.length > 0 && (
+              <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+                {/* HEADER */}
 
+                <div className="flex flex-col gap-2 border-b border-gray-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+                        <Package size={18} />
+                      </div>
+
+                      <h2 className="text-lg font-semibold text-gray-900">
+                        Product Sales
+                      </h2>
+                    </div>
+
+                    <p className="mt-1 text-sm text-gray-500">
+                      Products sold during the selected date range.
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg bg-gray-50 px-3 py-2 text-xs font-medium text-gray-500">
+                    {productSales.length}{" "}
+                    {productSales.length === 1 ? "product" : "products"}
+                  </div>
+                </div>
+
+                {/* DESKTOP TABLE */}
+
+                <div className="hidden overflow-x-auto md:block">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-gray-100 bg-gray-50">
+                        <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                          Product
+                        </th>
+
+                        <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                          Quantity Sold
+                        </th>
+
+                        <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                          Selling Amount
+                        </th>
+                      </tr>
+                    </thead>
+
+                    <tbody className="divide-y divide-gray-100">
+                      {productSales.map((product) => (
+                        <tr
+                          key={product.cloth_name}
+                          className="transition hover:bg-gray-50"
+                        >
+                          <td className="px-5 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gray-100 text-gray-500">
+                                <Package size={16} />
+                              </div>
+
+                              <div>
+                                <p className="font-medium text-gray-900">
+                                  {product.cloth_name}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="px-5 py-4 text-right">
+                            <span className="inline-flex rounded-full bg-amber-50 px-3 py-1 text-sm font-semibold text-amber-700">
+                              {product.quantity}
+                            </span>
+                          </td>
+
+                          <td className="px-5 py-4 text-right text-sm font-semibold text-green-600">
+                            {formatCurrency(product.amount)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+
+                    <tfoot>
+                      <tr className="border-t border-gray-200 bg-gray-50">
+                        <td className="px-5 py-3 text-sm font-semibold text-gray-700">
+                          Total
+                        </td>
+
+                        <td className="px-5 py-3 text-right text-sm font-bold text-gray-900">
+                          {productSales.reduce(
+                            (total, product) => total + product.quantity,
+                            0,
+                          )}
+                        </td>
+
+                        <td className="px-5 py-3 text-right text-sm font-bold text-green-600">
+                          {formatCurrency(
+                            productSales.reduce(
+                              (total, product) => total + product.amount,
+                              0,
+                            ),
+                          )}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+
+                {/* MOBILE */}
+
+                <div className="divide-y divide-gray-100 md:hidden">
+                  {productSales.map((product) => (
+                    <div
+                      key={product.cloth_name}
+                      className="flex items-center justify-between gap-4 px-4 py-4"
+                    >
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-500">
+                          <Package size={16} />
+                        </div>
+
+                        <div className="min-w-0">
+                          <p className="truncate font-medium text-gray-900">
+                            {product.cloth_name}
+                          </p>
+
+                          <p className="mt-1 text-xs text-gray-400">
+                            {formatCurrency(product.amount)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 text-right">
+                        <span className="inline-flex rounded-full bg-amber-50 px-3 py-1 text-sm font-semibold text-amber-700">
+                          {product.quantity}
+                        </span>
+
+                        <p className="mt-1 text-[11px] text-gray-400">sold</p>
+                      </div>
+                    </div>
+                  ))}
+
+                  <div className="flex items-center justify-between bg-gray-50 px-4 py-3">
+                    <span className="text-sm font-semibold text-gray-700">
+                      Total Sold
+                    </span>
+
+                    <span className="text-sm font-bold text-gray-900">
+                      {productSales.reduce(
+                        (total, product) => total + product.quantity,
+                        0,
+                      )}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
             {/* =================================================
                 EXPAND / COLLAPSE
             ================================================= */}
-
             {history.length > 0 && (
               <div className="flex flex-wrap items-center justify-end gap-2">
                 <button
@@ -484,11 +661,9 @@ const History = () => {
                 </button>
               </div>
             )}
-
             {/* =================================================
                 HISTORY
             ================================================= */}
-
             <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
               <div className="border-b border-gray-100 px-5 py-4">
                 <h2 className="text-lg font-semibold text-gray-900">
