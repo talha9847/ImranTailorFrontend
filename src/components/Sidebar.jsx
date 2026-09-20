@@ -8,6 +8,8 @@ import {
   Activity,
   X,
   HistoryIcon,
+  PackageCheck,
+  Shirt,
 } from "lucide-react";
 
 const Sidebar = ({ isOpen, onClose }) => {
@@ -25,12 +27,17 @@ const Sidebar = ({ isOpen, onClose }) => {
     {
       name: "Used Inventory",
       path: "/used-inventory",
-      icon: History,
+      icon: PackageCheck,
     },
     {
       name: "Clothes",
       path: "/clothes",
-      icon: HistoryIcon,
+      icon: Shirt,
+    },
+    {
+      name: "History",
+      path: "/history",
+      icon: History,
     },
   ];
 
