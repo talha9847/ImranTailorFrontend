@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
-
 import {
   Package,
   Clock3,
@@ -10,6 +9,7 @@ import {
   AlertCircle,
   Loader2,
   ImagePlus,
+  RefreshCw,
 } from "lucide-react";
 
 import Navbar from "./Navbar";
@@ -32,16 +32,120 @@ const emptyDashboard = {
   },
 };
 
+const DASHBOARD_CACHE_KEY = "dashboard_cache";
+const CACHE_DURATION = 4 * 60 * 60 * 1000; // 4 hours
+
+function getCachedDashboard() {
+  try {
+    const cached = localStorage.getItem(DASHBOARD_CACHE_KEY);
+    if (!cached) return null;
+
+    const parsed = JSON.parse(cached);
+    const isExpired =
+      !parsed.timestamp || Date.now() - parsed.timestamp >= CACHE_DURATION;
+
+    if (isExpired || !parsed.data) {
+      localStorage.removeItem(DASHBOARD_CACHE_KEY);
+      return null;
+    }
+
+    return parsed.data;
+  } catch (error) {
+    console.error("Unable to read dashboard cache:", error);
+    localStorage.removeItem(DASHBOARD_CACHE_KEY);
+    return null;
+  }
+}
+
+function saveDashboardCache(data) {
+  try {
+    localStorage.setItem(
+      DASHBOARD_CACHE_KEY,
+      JSON.stringify({
+        timestamp: Date.now(),
+        data,
+      }),
+    );
+  } catch (error) {
+    // The dashboard still works if localStorage is unavailable or full.
+    console.error("Unable to save dashboard cache:", error);
+  }
+}
+
 const Dashboard = () => {
+  const navigate = useNavigate();
+
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [dashboard, setDashboard] = useState(emptyDashboard);
-  const [loading, setLoading] = useState(true);
+  const [initialCachedDashboard] = useState(() => getCachedDashboard());
+  const [dashboard, setDashboard] = useState(
+    () => initialCachedDashboard || emptyDashboard,
+  );
+  const [loading, setLoading] = useState(!initialCachedDashboard);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    getDashboard();
+    // Only call the API on mount if there is no valid cached response.
+    if (!initialCachedDashboard) {
+      getDashboard();
+    }
+    // This runs once on mount; getDashboard is a local function declaration.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const navigate = useNavigate();
+
+  async function getDashboard(showLoader = true) {
+    try {
+      if (showLoader) {
+        setLoading(true);
+      } else {
+        setRefreshing(true);
+      }
+
+      setError("");
+
+      const response = await axios.get("/api/dashboard/getDashboard", {
+        withCredentials: true,
+      });
+
+      const result = response.data;
+
+      if (!result?.success) {
+        throw new Error(result?.message || "Failed to load dashboard");
+      }
+
+      const data = result.data || {};
+      const normalizedDashboard = {
+        ...emptyDashboard,
+        ...data,
+        summary: {
+          ...emptyDashboard.summary,
+          ...(data.summary || {}),
+        },
+        reminders: {
+          ...emptyDashboard.reminders,
+          ...(data.reminders || {}),
+        },
+      };
+
+      // Update the screen and replace the cached JSON with the newest response.
+      setDashboard(normalizedDashboard);
+      saveDashboardCache(normalizedDashboard);
+    } catch (err) {
+      console.error("Get dashboard error:", err.response?.data || err.message);
+
+      setError(
+        err.response?.data?.message ||
+          err.message ||
+          "Unable to load dashboard",
+      );
+    } finally {
+      if (showLoader) {
+        setLoading(false);
+      } else {
+        setRefreshing(false);
+      }
+    }
+  }
 
   const handleLogout = async () => {
     try {
@@ -53,16 +157,16 @@ const Dashboard = () => {
         },
       );
 
+      // Avoid showing one user's cached dashboard after logout.
+      localStorage.removeItem(DASHBOARD_CACHE_KEY);
       navigate("/");
-    } catch (error) {
-      console.error("Logout error:", error);
+    } catch (err) {
+      console.error("Logout error:", err);
     }
   };
 
   function normalizeDateValue(value) {
-    if (!value) {
-      return "";
-    }
+    if (!value) return "";
 
     const stringValue = String(value);
 
@@ -71,28 +175,18 @@ const Dashboard = () => {
     }
 
     const match = stringValue.match(/^(\d{4}-\d{2}-\d{2})/);
-
     return match ? match[1] : "";
   }
 
   function formatDate(value) {
     const dateValue = normalizeDateValue(value);
-
-    if (!dateValue) {
-      return "-";
-    }
+    if (!dateValue) return "-";
 
     const [year, month, day] = dateValue.split("-").map(Number);
-
-    if (!year || !month || !day) {
-      return "-";
-    }
+    if (!year || !month || !day) return "-";
 
     const date = new Date(year, month - 1, day);
-
-    if (Number.isNaN(date.getTime())) {
-      return "-";
-    }
+    if (Number.isNaN(date.getTime())) return "-";
 
     return date.toLocaleDateString("en-IN", {
       day: "2-digit",
@@ -102,17 +196,9 @@ const Dashboard = () => {
   }
 
   function getDriveUrl(photo) {
-    if (!photo) {
-      return "";
-    }
-
-    if (typeof photo === "string") {
-      return photo;
-    }
-
-    if (photo.url) {
-      return photo.url;
-    }
+    if (!photo) return "";
+    if (typeof photo === "string") return photo;
+    if (photo.url) return photo.url;
 
     if (photo.id) {
       return `https://drive.google.com/file/d/${photo.id}/view?usp=sharing`;
@@ -123,10 +209,7 @@ const Dashboard = () => {
 
   function openPhoto(photo) {
     const url = getDriveUrl(photo);
-
-    if (!url) {
-      return;
-    }
+    if (!url) return;
 
     window.open(url, "_blank", "noopener,noreferrer");
   }
@@ -136,10 +219,7 @@ const Dashboard = () => {
       return (
         <div
           className="flex items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50 text-gray-300"
-          style={{
-            width: size,
-            height: size,
-          }}
+          style={{ width: size, height: size }}
         >
           <ImagePlus size={20} />
         </div>
@@ -152,10 +232,7 @@ const Dashboard = () => {
       return (
         <div
           className="flex items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50 text-gray-300"
-          style={{
-            width: size,
-            height: size,
-          }}
+          style={{ width: size, height: size }}
         >
           <ImagePlus size={20} />
         </div>
@@ -167,15 +244,19 @@ const Dashboard = () => {
         src={imageUrl}
         alt={alt}
         loading="lazy"
+        decoding="async"
         onClick={() => openPhoto(photo)}
         onError={(event) => {
+          console.error("Image load failed:", {
+            url: imageUrl,
+            error: event.currentTarget.src,
+          });
+
+          event.currentTarget.onerror = null;
           event.currentTarget.style.display = "none";
         }}
         className="cursor-pointer rounded-lg border border-gray-200 object-cover transition hover:opacity-80"
-        style={{
-          width: size,
-          height: size,
-        }}
+        style={{ width: size, height: size }}
       />
     );
   }
@@ -219,62 +300,15 @@ const Dashboard = () => {
     );
   }
 
-  async function getDashboard(showLoader = true) {
-    try {
-      if (showLoader) {
-        setLoading(true);
-      }
-
-      setError("");
-
-      const response = await axios.get("/api/dashboard/getDashboard", {
-        withCredentials: true,
-      });
-
-      const data = response.data;
-
-      if (!data?.success) {
-        throw new Error(data?.message || "Failed to load dashboard");
-      }
-
-      setDashboard({
-        ...emptyDashboard,
-        ...(data.data || {}),
-        summary: {
-          ...emptyDashboard.summary,
-          ...(data.data?.summary || {}),
-        },
-        reminders: {
-          ...emptyDashboard.reminders,
-          ...(data.data?.reminders || {}),
-        },
-      });
-    } catch (error) {
-      console.error(
-        "Get dashboard error:",
-        error.response?.data || error.message,
-      );
-
-      setError(
-        error.response?.data?.message ||
-          error.message ||
-          "Unable to load dashboard",
-      );
-    } finally {
-      if (showLoader) {
-        setLoading(false);
-      }
-    }
-  }
-
   const summary = dashboard.summary;
 
-  const reminders = useMemo(() => {
-    return [
+  const reminders = useMemo(
+    () => [
       ...(dashboard.reminders?.passed || []),
       ...(dashboard.reminders?.today || []),
-    ];
-  }, [dashboard.reminders]);
+    ],
+    [dashboard.reminders],
+  );
 
   const today = new Date().toLocaleDateString("en-IN", {
     day: "2-digit",
@@ -305,21 +339,34 @@ const Dashboard = () => {
                 </p>
               </div>
 
-              <div className="flex w-fit shrink-0 items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 shadow-sm">
-                <CalendarDays size={16} />
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => getDashboard(false)}
+                  disabled={refreshing}
+                  className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <RefreshCw
+                    size={16}
+                    className={refreshing ? "animate-spin" : ""}
+                  />
+                  {refreshing ? "Refreshing..." : "Refresh"}
+                </button>
 
-                <span>{today}</span>
+                <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 shadow-sm">
+                  <CalendarDays size={16} />
+                  <span>{today}</span>
+                </div>
               </div>
             </div>
 
             {error && (
-              <div className="flex items-center justify-between rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
                 <span>{error}</span>
-
                 <button
                   type="button"
                   onClick={() => getDashboard()}
-                  className="font-medium underline"
+                  className="shrink-0 font-medium underline"
                 >
                   Retry
                 </button>
@@ -330,11 +377,9 @@ const Dashboard = () => {
               <div className="flex min-h-[500px] items-center justify-center rounded-2xl border border-gray-100 bg-white shadow-sm">
                 <div className="flex flex-col items-center justify-center">
                   <Loader2 size={38} className="animate-spin text-[#172033]" />
-
                   <p className="mt-4 text-sm font-medium text-gray-600">
                     Loading dashboard...
                   </p>
-
                   <p className="mt-1 text-xs text-gray-400">
                     Please wait while we load your orders.
                   </p>
@@ -349,16 +394,13 @@ const Dashboard = () => {
                         <p className="text-sm font-medium text-gray-500">
                           Total Clothes
                         </p>
-
                         <h2 className="mt-2 text-3xl font-semibold text-[#172033]">
                           {summary.totalClothes}
                         </h2>
-
                         <p className="mt-2 text-xs text-gray-400">
                           Total active orders
                         </p>
                       </div>
-
                       <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#172033] text-[#d9a441]">
                         <Package size={21} />
                       </div>
@@ -371,16 +413,13 @@ const Dashboard = () => {
                         <p className="text-sm font-medium text-gray-500">
                           Pending
                         </p>
-
                         <h2 className="mt-2 text-3xl font-semibold text-[#172033]">
                           {summary.pending}
                         </h2>
-
                         <p className="mt-2 text-xs text-gray-400">
                           Work still in progress
                         </p>
                       </div>
-
                       <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
                         <Clock3 size={21} />
                       </div>
@@ -393,16 +432,13 @@ const Dashboard = () => {
                         <p className="text-sm font-medium text-gray-500">
                           Ready Clothes
                         </p>
-
                         <h2 className="mt-2 text-3xl font-semibold text-[#172033]">
                           {summary.ready}
                         </h2>
-
                         <p className="mt-2 text-xs text-gray-400">
                           Ready for customer delivery
                         </p>
                       </div>
-
                       <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-50 text-green-600">
                         <CheckCircle2 size={21} />
                       </div>
@@ -417,16 +453,13 @@ const Dashboard = () => {
                         <p className="text-sm font-medium text-red-600">
                           Passed
                         </p>
-
                         <h3 className="mt-1 text-2xl font-semibold text-red-700">
                           {summary.passedReminders}
                         </h3>
-
                         <p className="mt-1 text-xs text-red-500">
                           Reminder date has passed
                         </p>
                       </div>
-
                       <AlertCircle size={24} className="text-red-500" />
                     </div>
                   </div>
@@ -437,16 +470,13 @@ const Dashboard = () => {
                         <p className="text-sm font-medium text-amber-600">
                           Today
                         </p>
-
                         <h3 className="mt-1 text-2xl font-semibold text-amber-700">
                           {summary.todayReminders}
                         </h3>
-
                         <p className="mt-1 text-xs text-amber-600">
                           Need attention today
                         </p>
                       </div>
-
                       <Bell size={24} className="text-amber-500" />
                     </div>
                   </div>
@@ -457,16 +487,13 @@ const Dashboard = () => {
                         <p className="text-sm font-medium text-gray-600">
                           Upcoming
                         </p>
-
                         <h3 className="mt-1 text-2xl font-semibold text-[#172033]">
                           {summary.upcomingReminders}
                         </h3>
-
                         <p className="mt-1 text-xs text-gray-500">
                           Future reminders
                         </p>
                       </div>
-
                       <CalendarDays size={24} className="text-gray-500" />
                     </div>
                   </div>
@@ -476,9 +503,8 @@ const Dashboard = () => {
                   <div className="flex flex-col gap-3 border-b border-gray-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <h2 className="text-lg font-semibold text-gray-900">
-                        Today's & Overdue Orders
+                        Today's &amp; Overdue Orders
                       </h2>
-
                       <p className="text-sm text-gray-500">
                         Today's reminders and overdue pending orders
                       </p>
@@ -488,7 +514,6 @@ const Dashboard = () => {
                       <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-medium text-red-600">
                         Passed: {summary.passedReminders}
                       </span>
-
                       <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-600">
                         Today: {summary.todayReminders}
                       </span>
@@ -502,11 +527,9 @@ const Dashboard = () => {
                           size={38}
                           className="mx-auto text-green-500"
                         />
-
                         <p className="mt-3 text-sm font-medium text-gray-600">
                           No reminders for today
                         </p>
-
                         <p className="mt-1 text-xs text-gray-400">
                           There are no overdue pending orders either.
                         </p>
@@ -518,33 +541,22 @@ const Dashboard = () => {
                         <table className="w-full min-w-[1100px]">
                           <thead>
                             <tr className="border-b border-gray-100 bg-gray-50">
-                              <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                Customer
-                              </th>
-
-                              <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                Contact
-                              </th>
-
-                              <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                Clothes
-                              </th>
-
-                              <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                Note
-                              </th>
-
-                              <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                Reminder
-                              </th>
-
-                              <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                Delivery
-                              </th>
-
-                              <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                Status
-                              </th>
+                              {[
+                                "Customer",
+                                "Contact",
+                                "Clothes",
+                                "Note",
+                                "Reminder",
+                                "Delivery",
+                                "Status",
+                              ].map((heading) => (
+                                <th
+                                  key={heading}
+                                  className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500"
+                                >
+                                  {heading}
+                                </th>
+                              ))}
                             </tr>
                           </thead>
 
@@ -558,7 +570,6 @@ const Dashboard = () => {
                                   <p className="font-semibold text-gray-900">
                                     {item.customer_name || "No name"}
                                   </p>
-
                                   <p className="mt-1 text-xs text-gray-400">
                                     Order #{item.id}
                                   </p>
@@ -594,7 +605,6 @@ const Dashboard = () => {
                                       ? "Passed"
                                       : "Today"}
                                   </span>
-
                                   <p className="mt-1 text-sm text-gray-700">
                                     {formatDate(item.remainder_date)}
                                   </p>
@@ -638,11 +648,9 @@ const Dashboard = () => {
                                 <h3 className="font-semibold text-gray-900">
                                   {item.customer_name || "No name"}
                                 </h3>
-
                                 <p className="mt-1 text-sm text-gray-500">
                                   {item.contact || "No contact"}
                                 </p>
-
                                 <p className="mt-1 text-xs text-gray-400">
                                   Order #{item.id}
                                 </p>
@@ -665,7 +673,6 @@ const Dashboard = () => {
                               <p className="mb-2 text-xs font-medium text-gray-400">
                                 Clothes
                               </p>
-
                               {renderClothPhotos(item, "90px")}
                             </div>
 
@@ -673,7 +680,6 @@ const Dashboard = () => {
                               <p className="mb-2 text-xs font-medium text-gray-400">
                                 Note
                               </p>
-
                               {renderPhoto(item.note_photo, "Note", "90px")}
                             </div>
 
@@ -682,7 +688,6 @@ const Dashboard = () => {
                                 <p className="text-xs text-gray-400">
                                   Reminder
                                 </p>
-
                                 <p className="mt-1 text-sm font-medium text-gray-700">
                                   {formatDate(item.remainder_date)}
                                 </p>
@@ -692,7 +697,6 @@ const Dashboard = () => {
                                 <p className="text-xs text-gray-400">
                                   Delivery
                                 </p>
-
                                 <p className="mt-1 text-sm font-medium text-gray-700">
                                   {item.delivery_date
                                     ? formatDate(item.delivery_date)
@@ -702,7 +706,6 @@ const Dashboard = () => {
 
                               <div>
                                 <p className="text-xs text-gray-400">Status</p>
-
                                 <p className="mt-1 text-sm font-medium capitalize text-gray-700">
                                   {item.status}
                                 </p>

@@ -113,6 +113,21 @@ const Clothes = () => {
     }
   };
 
+  function handleImageError(event, fileId) {
+    const img = event.currentTarget;
+
+    // First failure: retry through your backend proxy
+    if (!img.dataset.fallback && fileId) {
+      img.dataset.fallback = "1";
+      img.src = `/api/clothes/photo/${fileId}`;
+      return;
+    }
+
+    // Second failure: hide the image
+    img.onerror = null;
+    img.style.display = "none";
+  }
+
   function normalizeDateValue(value) {
     if (!value) return "";
 
@@ -1128,7 +1143,10 @@ const Clothes = () => {
         src={photo.thumbnail || photo.url || ""}
         alt={alt}
         loading="lazy"
+        decoding="async"
+        referrerPolicy="no-referrer"
         onClick={() => openPhoto(photo)}
+        onError={(event) => handleImageError(event, photo.id)}
         className="cursor-pointer rounded-lg border border-gray-200 object-cover transition hover:opacity-80"
         style={{
           width: size,
@@ -1862,6 +1880,13 @@ const Clothes = () => {
                                 <img
                                   src={imagePreview}
                                   alt={`Cloth ${index + 1}`}
+                                  referrerPolicy="no-referrer"
+                                  onError={(event) =>
+                                    handleImageError(
+                                      event,
+                                      existing?.cloth_photo?.id,
+                                    )
+                                  }
                                   className="h-52 w-full object-cover"
                                 />
 
@@ -1955,6 +1980,15 @@ const Clothes = () => {
                         <img
                           src={notePreview}
                           alt="Note preview"
+                          referrerPolicy="no-referrer"
+                          onError={(event) => {
+                            if (notePreview.startsWith("blob:")) return;
+                            // the note's Drive ID is in the edited item, so keep it in the form
+                            handleImageError(
+                              event,
+                              form.existing_note_photo?.id,
+                            );
+                          }}
                           className="h-52 w-full object-cover"
                         />
 
