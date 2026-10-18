@@ -2,12 +2,14 @@ import axios from "axios";
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader2, Scissors } from "lucide-react";
+import { useAuth } from "../context/authContext";
 
 const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const { setUser } = useAuth();
 
   const navigate = useNavigate();
 
@@ -18,20 +20,23 @@ const Login = () => {
     setError("");
 
     try {
-      const res = await axios.post(
+      // Step 1: Log in
+      await axios.post(
         "/api/auth/login",
-        {
-          email,
-          password,
-        },
-        {
-          withCredentials: true,
-        },
+        { email, password },
+        { withCredentials: true },
       );
 
-      if (res.status === 200) {
-        navigate("/dashboard");
-      }
+      // Step 2: Get the logged-in user
+      const meRes = await axios.get("/api/auth/me", {
+        withCredentials: true,
+      });
+
+      // Step 3: Update the shared authentication state
+      setUser(meRes.data.user);
+
+      // Step 4: Navigate to dashboard
+      navigate("/dashboard", { replace: true });
     } catch (error) {
       console.error("Login error:", error);
 
