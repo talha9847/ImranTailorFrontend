@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://imrantailorbackend.onrender.com/api/:path*"
+      "destination": "https://imrantailorbackend-2qsu.onrender.com/api/:path*"
     },
     {
       "source": "/:path*",
