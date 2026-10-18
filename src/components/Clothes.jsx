@@ -17,12 +17,15 @@ import {
   Upload,
   ChevronDown,
   Pencil,
+  RefreshCw,
 } from "lucide-react";
 
 import Navbar from "./Navbar";
 import Sidebar from "./Sidebar";
 
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+const CLOTHES_CACHE_KEY = "tailorhub_clothes_cache_v1";
+const CLOTHES_CACHE_TTL = 4 * 60 * 60 * 1000; // 4 hours
 
 const emptyForm = {
   customer_name: "",
@@ -58,6 +61,8 @@ const Clothes = () => {
 
   const [clothes, setClothes] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastFetchedAt, setLastFetchedAt] = useState(null);
 
   const [operationLoading, setOperationLoading] = useState(false);
   const [statusLoadingId, setStatusLoadingId] = useState(null);
@@ -88,7 +93,9 @@ const Clothes = () => {
   const [notePreview, setNotePreview] = useState("");
 
   useEffect(() => {
-    getClothes();
+    // Render a valid cached response immediately. Fetch only when the cache
+    // is missing/expired; the Refresh button always bypasses the cache.
+    getClothes({ useCache: true, showLoader: true });
   }, []);
 
   /*
@@ -107,6 +114,7 @@ const Clothes = () => {
         },
       );
 
+      invalidateClothesCache();
       window.location.href = "/login";
     } catch (error) {
       console.error("Logout error:", error);
@@ -312,7 +320,76 @@ const Clothes = () => {
    * ------------------------------------------------------------
    */
 
-  async function getClothes(showLoader = true) {
+  function readClothesCache() {
+    try {
+      const rawCache = localStorage.getItem(CLOTHES_CACHE_KEY);
+      if (!rawCache) return null;
+
+      const cache = JSON.parse(rawCache);
+      const isValid =
+        cache &&
+        Array.isArray(cache.data) &&
+        Number.isFinite(cache.savedAt) &&
+        Date.now() - cache.savedAt < CLOTHES_CACHE_TTL;
+
+      if (!isValid) {
+        localStorage.removeItem(CLOTHES_CACHE_KEY);
+        return null;
+      }
+
+      return cache;
+    } catch (cacheError) {
+      // Storage can be unavailable or contain malformed JSON.
+      try {
+        localStorage.removeItem(CLOTHES_CACHE_KEY);
+      } catch {
+        // Ignore storage cleanup errors.
+      }
+      return null;
+    }
+  }
+
+  function writeClothesCache(data) {
+    const savedAt = Date.now();
+
+    try {
+      localStorage.setItem(
+        CLOTHES_CACHE_KEY,
+        JSON.stringify({ data, savedAt }),
+      );
+    } catch (cacheError) {
+      // The app still works if browser storage is full or disabled.
+      console.warn("Unable to cache clothes response:", cacheError);
+    }
+
+    setLastFetchedAt(savedAt);
+  }
+
+  function invalidateClothesCache() {
+    try {
+      localStorage.removeItem(CLOTHES_CACHE_KEY);
+    } catch {
+      // Ignore storage errors; the next request will still refresh the UI.
+    }
+  }
+
+  async function getClothes({
+    useCache = false,
+    forceRefresh = false,
+    showLoader = true,
+  } = {}) {
+    if (useCache && !forceRefresh) {
+      const cached = readClothesCache();
+
+      if (cached) {
+        setClothes(cached.data);
+        setLastFetchedAt(cached.savedAt);
+        setError("");
+        setLoading(false);
+        return;
+      }
+    }
+
     try {
       if (showLoader) {
         setLoading(true);
@@ -331,6 +408,7 @@ const Clothes = () => {
         : data?.clothes || data?.data || [];
 
       setClothes(clothesData);
+      writeClothesCache(clothesData);
     } catch (error) {
       console.error(
         "Get clothes error:",
@@ -344,6 +422,15 @@ const Clothes = () => {
       if (showLoader) {
         setLoading(false);
       }
+    }
+  }
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    try {
+      await getClothes({ forceRefresh: true, showLoader: false });
+    } finally {
+      setRefreshing(false);
     }
   }
 
@@ -859,7 +946,8 @@ const Clothes = () => {
 
       setUploadProgress(100);
 
-      await getClothes(false);
+      invalidateClothesCache();
+      await getClothes({ forceRefresh: true, showLoader: false });
 
       setModalOpen(false);
 
@@ -923,7 +1011,8 @@ const Clothes = () => {
 
       setUploadProgress(100);
 
-      await getClothes(false);
+      invalidateClothesCache();
+      await getClothes({ forceRefresh: true, showLoader: false });
 
       setModalOpen(false);
 
@@ -1042,7 +1131,8 @@ const Clothes = () => {
         },
       );
 
-      await getClothes(false);
+      invalidateClothesCache();
+      await getClothes({ forceRefresh: true, showLoader: false });
     } catch (error) {
       console.error(
         "Update status error:",
@@ -1189,7 +1279,7 @@ const Clothes = () => {
    */
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-[#f8f9fb]">
+    <div className="min-h-screen overflow-x-hidden bg-[#f5f6f8] text-[#172033]">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <div className="min-h-screen ml-0 lg:ml-64">
@@ -1199,28 +1289,43 @@ const Clothes = () => {
         />
 
         <main className="pt-20">
-          <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+          <div className="mx-auto max-w-[1500px] space-y-5 p-3 pb-8 sm:space-y-6 sm:p-6 lg:p-8">
             {/* Header */}
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-4 rounded-3xl bg-gradient-to-br from-[#172033] via-[#202b40] to-[#30394a] p-5 text-white shadow-lg shadow-slate-900/10 sm:flex-row sm:items-center sm:justify-between sm:p-7">
               <div>
-                <h1 className="text-2xl font-semibold tracking-tight text-[#172033] sm:text-3xl">
+                <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
                   All Clothes
                 </h1>
 
-                <p className="mt-1 text-sm text-gray-500">
+                <p className="mt-2 max-w-xl text-sm leading-6 text-slate-200">
                   View and manage all customer clothing orders.
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={openAddModal}
-                disabled={operationLoading}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#172033] px-4 py-3 text-sm font-medium text-white shadow-sm transition hover:bg-[#222d43] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-              >
-                <Plus size={18} />
-                Add Customer
-              </button>
+              <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:items-center">
+                <button
+                  type="button"
+                  onClick={handleRefresh}
+                  disabled={refreshing || operationLoading}
+                  className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-white/25 bg-white/10 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                  aria-label="Refresh clothes orders"
+                >
+                  <RefreshCw
+                    size={16}
+                    className={refreshing ? "animate-spin" : ""}
+                  />
+                  {refreshing ? "Refreshing..." : "Refresh"}
+                </button>
+                <button
+                  type="button"
+                  onClick={openAddModal}
+                  disabled={operationLoading}
+                  className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#dca83f] px-5 py-3 text-sm font-bold text-[#172033] shadow-sm transition hover:bg-[#e7b64f] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                >
+                  <Plus size={18} />
+                  Add Customer
+                </button>
+              </div>
             </div>
 
             {/* Error */}
@@ -1239,7 +1344,7 @@ const Clothes = () => {
             )}
 
             {/* Search / filters */}
-            <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-5">
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-3 shadow-sm sm:rounded-3xl sm:p-5">
               <div className="flex flex-col gap-4">
                 <div className="relative w-full">
                   <Search
@@ -1252,17 +1357,17 @@ const Clothes = () => {
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
                     placeholder="Search customer, contact or order..."
-                    className="w-full rounded-xl border border-gray-200 bg-gray-50 py-3 pl-10 pr-4 text-sm text-[#172033] outline-none transition placeholder:text-gray-400 focus:border-[#d9a441] focus:bg-white"
+                    className="min-h-12 w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-base text-[#172033] outline-none transition placeholder:text-gray-400 focus:border-[#d9a441] focus:bg-white sm:text-sm"
                   />
                 </div>
 
-                <div className="flex gap-2 overflow-x-auto pb-1">
+                <div className="-mx-1 flex snap-x snap-mandatory gap-2 overflow-x-auto px-1 pb-2">
                   {filterButtons.map((filter) => (
                     <button
                       key={filter.key}
                       type="button"
                       onClick={() => setActiveFilter(filter.key)}
-                      className={`flex shrink-0 items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition ${
+                      className={`flex min-h-11 shrink-0 snap-start items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
                         activeFilter === filter.key
                           ? "bg-[#172033] text-white"
                           : "border border-gray-200 bg-white text-gray-600 hover:border-[#d9a441] hover:text-[#8f681d]"
@@ -1286,7 +1391,7 @@ const Clothes = () => {
             </div>
 
             {/* Table */}
-            <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+            <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm sm:rounded-3xl">
               <div className="flex flex-col gap-2 border-b border-gray-100 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
                 <div className="flex items-center gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#f1e6c9] text-[#8f681d]">
@@ -1302,6 +1407,15 @@ const Clothes = () => {
 
                     <p className="text-xs text-gray-400">
                       Showing {filteredClothes.length} orders
+                      {lastFetchedAt && (
+                        <span className="ml-1">
+                          · Updated{" "}
+                          {new Date(lastFetchedAt).toLocaleTimeString("en-IN", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      )}
                     </p>
                   </div>
                 </div>
@@ -1520,7 +1634,7 @@ const Clothes = () => {
                   </div>
 
                   {/* Mobile */}
-                  <div className="space-y-3 p-4 md:hidden">
+                  <div className="space-y-3 p-3 sm:space-y-4 sm:p-4 md:hidden">
                     {filteredClothes.map((item) => {
                       const status = getStatus(item.status);
 
@@ -1531,7 +1645,7 @@ const Clothes = () => {
                       return (
                         <div
                           key={item.id}
-                          className="rounded-xl border border-gray-100 bg-gray-50/60 p-4"
+                          className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm shadow-slate-200/40 transition sm:p-5"
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div className="flex min-w-0 items-center gap-3">
@@ -1565,7 +1679,7 @@ const Clothes = () => {
                               Clothes
                             </p>
 
-                            {renderClothPhotos(item, "100px")}
+                            {renderClothPhotos(item, "76px")}
                           </div>
 
                           {/* Note */}
@@ -1574,11 +1688,11 @@ const Clothes = () => {
                               Note
                             </p>
 
-                            {renderPhoto(item.notePhoto, "Note", "100px")}
+                            {renderPhoto(item.notePhoto, "Note", "76px")}
                           </div>
 
-                          <div className="mt-4 grid grid-cols-1 gap-2">
-                            <div className="flex items-center gap-2 rounded-lg bg-white px-3 py-2.5">
+                          <div className="mt-4 grid grid-cols-1 gap-2.5">
+                            <div className="flex min-h-11 min-w-0 items-center gap-2.5 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5">
                               <Phone size={14} className="text-gray-400" />
 
                               <span className="text-xs text-gray-600">
@@ -1587,7 +1701,7 @@ const Clothes = () => {
                             </div>
 
                             <div
-                              className={`flex items-center gap-2 rounded-lg bg-white px-3 py-2.5 ${getReminderClass(
+                              className={`flex min-h-11 min-w-0 items-center gap-2.5 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 ${getReminderClass(
                                 item.remainderDate,
                               )}`}
                             >
@@ -1598,7 +1712,7 @@ const Clothes = () => {
                               </span>
                             </div>
 
-                            <div className="flex items-center gap-2 rounded-lg bg-white px-3 py-2.5">
+                            <div className="flex min-h-11 min-w-0 items-center gap-2.5 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5">
                               <CalendarDays
                                 size={14}
                                 className="text-gray-400"
@@ -1610,12 +1724,12 @@ const Clothes = () => {
                             </div>
                           </div>
 
-                          <div className="mt-3 grid grid-cols-2 gap-2">
+                          <div className="mt-4 grid grid-cols-2 gap-2.5 border-t border-slate-100 pt-4">
                             <button
                               type="button"
                               onClick={() => openEditModal(item)}
                               disabled={operationLoading || !!statusLoadingId}
-                              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-xs font-medium text-gray-600 transition hover:border-[#d9a441] hover:bg-[#fffaf0] hover:text-[#8f681d] disabled:cursor-not-allowed disabled:opacity-50"
+                              className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-[#d9a441] hover:bg-[#fffaf0] hover:text-[#8f681d] disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               <Pencil size={14} />
                               Edit
@@ -1628,7 +1742,7 @@ const Clothes = () => {
                                 onChange={(event) =>
                                   updateStatus(item.id, event.target.value)
                                 }
-                                className="w-full appearance-none rounded-lg border border-gray-200 bg-white px-3 py-2.5 pr-8 text-xs text-gray-600 outline-none focus:border-[#d9a441] disabled:cursor-not-allowed disabled:opacity-50"
+                                className="min-h-11 w-full appearance-none rounded-xl border border-slate-200 bg-white px-3 py-2.5 pr-8 text-sm font-medium text-slate-700 outline-none focus:border-[#d9a441] disabled:cursor-not-allowed disabled:opacity-50"
                               >
                                 <option value="pending">Pending</option>
 
@@ -1700,10 +1814,10 @@ const Clothes = () => {
           ======================================================== */}
 
       {modalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
-          <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/60 backdrop-blur-[2px] sm:items-center sm:p-4">
+          <div className="flex max-h-[94dvh] w-full max-w-3xl flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:max-h-[92vh] sm:rounded-2xl">
             {/* Modal header */}
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4 sm:px-6">
+            <div className="sticky top-0 z-20 flex shrink-0 items-center justify-between border-b border-slate-100 bg-white px-4 py-4 sm:px-6">
               <div>
                 <h2 className="text-lg font-semibold text-[#172033]">
                   {editMode ? "Edit Clothes Order" : "Add Customer"}
@@ -1726,8 +1840,11 @@ const Clothes = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit}>
-              <div className="space-y-6 p-5 sm:p-6">
+            <form
+              onSubmit={handleSubmit}
+              className="flex min-h-0 flex-1 flex-col overflow-hidden"
+            >
+              <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-4 pb-6 sm:p-6">
                 {error && (
                   <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
                     {error}
@@ -1752,7 +1869,7 @@ const Clothes = () => {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
                     <div>
                       <label className="mb-2 block text-sm font-medium text-gray-700">
                         Customer Name
@@ -1830,7 +1947,7 @@ const Clothes = () => {
                   </div>
 
                   {/* Cloth cards */}
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
                     {Array.from(
                       {
                         length: Number(form.cloth_count) || 1,
@@ -1887,7 +2004,7 @@ const Clothes = () => {
                                       existing?.cloth_photo?.id,
                                     )
                                   }
-                                  className="h-52 w-full object-cover"
+                                  className="max-h-[42vh] w-full object-contain bg-slate-50 sm:h-52 sm:object-cover"
                                 />
 
                                 {operationLoading && (
@@ -1927,7 +2044,7 @@ const Clothes = () => {
                                 </div>
                               </div>
                             ) : (
-                              <label className="flex h-52 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-gray-300 bg-gray-50 transition hover:border-[#d9a441] hover:bg-[#fffaf0]">
+                              <label className="flex min-h-44 cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 transition hover:border-[#d9a441] hover:bg-[#fffaf0] sm:h-52">
                                 {operationLoading ? (
                                   <Loader2
                                     size={25}
@@ -1989,7 +2106,7 @@ const Clothes = () => {
                               form.existing_note_photo?.id,
                             );
                           }}
-                          className="h-52 w-full object-cover"
+                          className="max-h-[42vh] w-full object-contain bg-slate-50 sm:h-52 sm:object-cover"
                         />
 
                         {operationLoading && (
@@ -2025,7 +2142,7 @@ const Clothes = () => {
                         </div>
                       </div>
                     ) : (
-                      <label className="flex h-52 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-gray-300 bg-gray-50 transition hover:border-[#d9a441] hover:bg-[#fffaf0]">
+                      <label className="flex min-h-44 cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 transition hover:border-[#d9a441] hover:bg-[#fffaf0] sm:h-52">
                         {operationLoading ? (
                           <Loader2
                             size={25}
@@ -2079,7 +2196,7 @@ const Clothes = () => {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
                     <div>
                       <label className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-700">
                         <Bell size={15} className="text-amber-500" />
@@ -2144,12 +2261,12 @@ const Clothes = () => {
               </div>
 
               {/* Footer */}
-              <div className="flex flex-col-reverse gap-3 border-t border-gray-100 px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
+              <div className="sticky bottom-0 z-20 flex shrink-0 flex-col-reverse gap-2 border-t border-slate-200 bg-white px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 sm:flex-row sm:justify-end sm:px-6 sm:py-4">
                 <button
                   type="button"
                   onClick={closeModal}
                   disabled={operationLoading}
-                  className="w-full rounded-xl border border-gray-200 px-5 py-3 text-sm font-medium text-gray-600 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                  className="min-h-12 w-full rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                 >
                   Cancel
                 </button>
@@ -2157,7 +2274,7 @@ const Clothes = () => {
                 <button
                   type="submit"
                   disabled={operationLoading}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#172033] px-5 py-3 text-sm font-medium text-white transition hover:bg-[#222d43] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                  className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#172033] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#222d43] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                 >
                   {operationLoading ? (
                     <>
